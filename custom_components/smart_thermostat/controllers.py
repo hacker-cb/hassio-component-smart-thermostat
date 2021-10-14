@@ -191,7 +191,7 @@ class SwitchController(AbstractController):
             if not long_enough:
                 return
 
-        too_cold = target_temp >= cur_temp + self._cold_tolerance
+        too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
         if self._is_device_active:
             if (self._mode == HVAC_MODE_COOL and too_cold) or (self._mode == HVAC_MODE_HEAT and too_hot):

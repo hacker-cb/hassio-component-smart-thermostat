@@ -369,6 +369,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         return self._hvac_list
 
     def _set_hvac_mode(self, hvac_mode: str):
+        _LOGGER.info(f"Setting HVAC mode from {self._hvac_mode} to {hvac_mode}")
         self._hvac_mode = hvac_mode
         for controller in self._controllers:
             controller.set_hvac_mode(hvac_mode)

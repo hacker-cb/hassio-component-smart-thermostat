@@ -158,8 +158,6 @@ class SwitchController(AbstractController):
                 target_temp,
             )
 
-        _LOGGER.debug(f"async_control cur: {cur_temp}, target: {target_temp}")  # FIXME:HARDCODE
-
         if self._hvac_mode == HVAC_MODE_OFF and self.running:
             await self._async_turn_off()
 
@@ -197,7 +195,7 @@ class SwitchController(AbstractController):
         _LOGGER.debug(f"{self.name} ({self._mode}, current: {self._hvac_mode}): "
                       f"too_hot: {too_hot}, too_cold: {too_cold} "
                       f"allow_cool: {allow_cool}, allow_heat: {too_cold} "
-                      f"cur: {cur_temp}, target: {target_temp}")  # FIXME:HARDCODE
+                      f"cur: {cur_temp}, target: {target_temp}")
 
         if self.running:
             if (self._mode == HVAC_MODE_COOL and not allow_cool) or (self._mode == HVAC_MODE_HEAT and not allow_heat):

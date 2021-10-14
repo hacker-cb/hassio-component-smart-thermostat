@@ -93,8 +93,8 @@ class SwitchController(AbstractController):
         self._target_inverted = self._target[CONF_INVERTED]
         self._min_cycle_duration = self._target[CONF_MIN_DUR] if CONF_MIN_DUR in self._target else None
 
-    @property
-    def _is_device_active(self):
+    @AbstractController.running.getter
+    def running(self):
         """If the toggleable device is currently active."""
         if not self._hass.states.get(self._target_entity_id):
             return None
@@ -113,7 +113,7 @@ class SwitchController(AbstractController):
 
     async def _check_switch_initial_state(self):
         """Prevent the device from keep running if HVAC_MODE_OFF."""
-        if self._hvac_mode == HVAC_MODE_OFF and self._is_device_active:
+        if self._hvac_mode == HVAC_MODE_OFF and self.running:
             _LOGGER.warning(
                 "The climate mode is OFF, but the switch device is ON. Turning off device %s",
                 self._target_entity_id,
@@ -127,10 +127,6 @@ class SwitchController(AbstractController):
                 STATE_UNKNOWN,
         ):
             self._hass.create_task(self._check_switch_initial_state())
-
-    @AbstractController.running.getter
-    def running(self):
-        return self._is_device_active
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""
@@ -162,7 +158,7 @@ class SwitchController(AbstractController):
                 target_temp,
             )
 
-        if self._hvac_mode == HVAC_MODE_OFF and self._is_device_active:
+        if self._hvac_mode == HVAC_MODE_OFF and self.running:
             await self._async_turn_off()
 
         if not self._active or self._hvac_mode == HVAC_MODE_OFF:
@@ -173,7 +169,7 @@ class SwitchController(AbstractController):
         # If the `time` argument is not none, we were invoked for
         # keep-alive purposes, and `min_cycle_duration` is irrelevant.
         if not force and time is None and self._min_cycle_duration:
-            if self._is_device_active:
+            if self.running:
                 current_state = STATE_ON
             else:
                 current_state = HVAC_MODE_OFF
@@ -192,7 +188,7 @@ class SwitchController(AbstractController):
 
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
-        if self._is_device_active:
+        if self.running:
             if (self._mode == HVAC_MODE_COOL and too_cold) or (self._mode == HVAC_MODE_HEAT and too_hot):
                 _LOGGER.info("Turning off %s %s", self.name, self._target_entity_id)
                 await self._async_turn_off()

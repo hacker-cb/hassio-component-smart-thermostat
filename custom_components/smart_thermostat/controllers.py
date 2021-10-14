@@ -24,7 +24,7 @@ class AbstractController(abc.ABC):
             context: Context,
             hvac_modes: List[str],
             mode: str,
-            target_entity_conf: {}
+            target: {}
     ):
         self._name = name
         self._hass = hass
@@ -32,8 +32,8 @@ class AbstractController(abc.ABC):
         self._mode = mode
         self._supported_hvac_modes = hvac_modes
         self._hvac_mode = HVAC_MODE_OFF
-        self._target_entity_conf = target_entity_conf
-        self._target_entity_id = target_entity_conf[CONF_ENTITY_ID]
+        self._target = target
+        self._target_entity_id = target[CONF_ENTITY_ID]
         self._active = False
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
@@ -76,16 +76,16 @@ class SwitchController(AbstractController):
             context: Context,
             hvac_modes: List[str],
             mode,
-            target_entity_conf: {},
+            target: {},
             cold_tolerance,
             hot_tolerance
     ):
-        super().__init__(name, hass, context, hvac_modes, mode, target_entity_conf)
+        super().__init__(name, hass, context, hvac_modes, mode, target)
         self.name = name
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
-        self._target_inverted = self._target_entity_conf[CONF_INVERTED]
-        self._min_cycle_duration = self._target_entity_conf[CONF_MIN_DUR]
+        self._target_inverted = self._target[CONF_INVERTED]
+        self._min_cycle_duration = self._target[CONF_MIN_DUR]
 
     @property
     def _is_device_active(self):

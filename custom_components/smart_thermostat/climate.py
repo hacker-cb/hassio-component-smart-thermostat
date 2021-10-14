@@ -83,8 +83,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
 
     name = config.get(CONF_NAME)
-    heater_entity = _extract_target(config.get(CONF_HEATER))
-    cooler_entity = _extract_target(config.get(CONF_COOLER))
+    heater = _extract_target(config.get(CONF_HEATER))
+    cooler = _extract_target(config.get(CONF_COOLER))
     sensor_entity_id = config.get(CONF_SENSOR)
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
@@ -102,8 +102,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         [
             SmartThermostat(
                 name,
-                heater_entity,
-                cooler_entity,
+                heater,
+                cooler,
                 sensor_entity_id,
                 min_temp,
                 max_temp,
@@ -128,8 +128,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
     def __init__(
             self,
             name,
-            heater_entity,
-            cooler_entity,
+            heater,
+            cooler,
             sensor_entity_id,
             min_temp,
             max_temp,
@@ -170,14 +170,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         self._controllers = []
 
         # Create cooler
-        if cooler_entity is not None:
+        if cooler is not None:
             self._cooler = SwitchController(
                 'cooler',
                 self.hass,
                 self._context,
                 [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_COOL,
-                cooler_entity,
+                cooler,
                 cold_tolerance,
                 hot_tolerance
             )
@@ -187,14 +187,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
             self._cooler = None
 
         # Create heater
-        if heater_entity is not None:
+        if heater is not None:
             self._heater = SwitchController(
                 'heater',
                 self.hass,
                 self._context,
                 [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_HEAT,
-                heater_entity,
+                heater,
                 cold_tolerance,
                 hot_tolerance
             )
@@ -203,7 +203,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         else:
             self._heater = None
 
-        if cooler_entity and heater_entity:
+        if cooler and heater:
             self._hvac_list.append(HVAC_MODE_HEAT_COOL)
 
     async def async_added_to_hass(self):

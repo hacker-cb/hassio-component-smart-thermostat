@@ -8,8 +8,7 @@ import math
 
 import voluptuous as vol
 
-import homeassistant.helpers.config_validation as cv
-from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
+from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE,
     CURRENT_HVAC_COOL,
@@ -23,19 +22,13 @@ from homeassistant.components.climate.const import (
     PRESET_AWAY,
     PRESET_NONE,
     SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
 )
-from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
-from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_ENTITY_ID,
     CONF_NAME,
     CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_START,
-    PRECISION_HALVES,
-    PRECISION_TENTHS,
-    PRECISION_WHOLE,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
@@ -47,65 +40,27 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
+from .config import (
+    CONF_HEATER,
+    CONF_COOLER,
+    CONF_SENSOR,
+    CONF_MIN_TEMP,
+    CONF_MAX_TEMP,
+    CONF_TARGET_TEMP,
+    CONF_COLD_TOLERANCE,
+    CONF_HOT_TOLERANCE,
+    CONF_KEEP_ALIVE,
+    CONF_INITIAL_HVAC_MODE,
+    CONF_AWAY_TEMP,
+    CONF_PRECISION,
+    SUPPORT_FLAGS,
+    TARGET_SCHEMA,
+    KEY_SCHEMA,
+    DATA_SCHEMA
+)
 from .controllers import SwitchController
 
 _LOGGER = logging.getLogger(__name__)
-
-DEFAULT_TOLERANCE = 0.3
-DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool modes and PID control support"
-
-CONF_HEATER = "heater"
-CONF_COOLER = "cooler"
-CONF_INVERTED = "inverted"
-CONF_SENSOR = "target_sensor"
-CONF_MIN_TEMP = "min_temp"
-CONF_MAX_TEMP = "max_temp"
-CONF_TARGET_TEMP = "target_temp"
-CONF_MIN_DUR = "min_cycle_duration"
-CONF_COLD_TOLERANCE = "cold_tolerance"
-CONF_HOT_TOLERANCE = "hot_tolerance"
-CONF_KEEP_ALIVE = "keep_alive"
-CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
-CONF_AWAY_TEMP = "away_temp"
-CONF_PRECISION = "precision"
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
-SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]
-
-TARGET_SCHEMA = vol.Schema({
-    vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-    vol.Optional(CONF_INVERTED, default=False): bool,
-    vol.Optional(CONF_MIN_DUR): cv.positive_time_period
-})
-
-KEY_SCHEMA = vol.Schema({
-    vol.Required(
-        vol.Any(CONF_HEATER, CONF_COOLER),
-        msg=f"Must specify at least one: '{CONF_HEATER}' or '{CONF_COOLER}'"): object
-})
-
-DATA_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_HEATER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
-        vol.Required(CONF_COOLER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
-        vol.Required(CONF_SENSOR): cv.entity_id,
-        vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
-        vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-        vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
-        vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
-        ),
-        vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_PRECISION): vol.In(
-            [PRECISION_TENTHS, PRECISION_HALVES, PRECISION_WHOLE]
-        ),
-        vol.Optional(CONF_UNIQUE_ID): cv.string,
-    }
-)
 
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 

@@ -2,7 +2,7 @@ import abc
 import logging
 from typing import List
 
-from custom_components.smart_thermostat.climate import CONF_INVERTED, CONF_MIN_DUR
+from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, CONF_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, HomeAssistant, Context

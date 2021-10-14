@@ -54,8 +54,9 @@ class AbstractController(abc.ABC):
         """On state changed callback"""
 
     @property
-    def active(self) -> bool:
-        return self._active
+    @abc.abstractmethod
+    def running(self) -> bool:
+        """Is target running now?"""
 
     @property
     def can_run(self) -> bool:
@@ -121,6 +122,10 @@ class SwitchController(AbstractController):
                 STATE_UNKNOWN,
         ):
             self._hass.create_task(self._check_switch_initial_state())
+
+    @property
+    def running(self) -> bool:
+        return self._is_device_active()
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""

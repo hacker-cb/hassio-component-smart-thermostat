@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR
-from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT
+from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, CONF_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, HomeAssistant, Context
 from homeassistant.exceptions import ConditionError
@@ -20,7 +20,6 @@ class AbstractController(abc.ABC):
     def __init__(
             self,
             name: str,
-            hvac_modes: List[str],
             mode: str,
             target: {}
     ):
@@ -28,7 +27,6 @@ class AbstractController(abc.ABC):
         self._hass = Optional[HomeAssistant]
         self._context = Optional[Context]
         self._mode = mode
-        self._supported_hvac_modes = hvac_modes
         self._hvac_mode = HVAC_MODE_OFF
         self._target = target
         self._target_entity_id = target[CONF_ENTITY_ID]
@@ -65,10 +63,13 @@ class AbstractController(abc.ABC):
         """Is target running now?"""
 
     @property
-    def can_run(self) -> bool:
-        """Can controller run according current HVAC modes"""
-        # FIXME: not used not
-        return self._hvac_mode in self._supported_hvac_modes
+    def _allow_cool(self):
+        return self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
+
+    @property
+    def _allow_heat(self):
+        return self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
+
 
     @abc.abstractmethod
     async def async_control(self, cur_temp, target_temp, time=None, force=False):
@@ -80,13 +81,12 @@ class SwitchController(AbstractController):
     def __init__(
             self,
             name: str,
-            hvac_modes: List[str],
             mode,
             target: {},
             cold_tolerance,
             hot_tolerance
     ):
-        super().__init__(name, hvac_modes, mode, target)
+        super().__init__(name, mode, target)
         self.name = name
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
@@ -158,6 +158,8 @@ class SwitchController(AbstractController):
                 target_temp,
             )
 
+        _LOGGER.debug(f"async_control cur: {cur_temp}, target: {target_temp}")  # FIXME:HARDCODE
+
         if self._hvac_mode == HVAC_MODE_OFF and self.running:
             await self._async_turn_off()
 
@@ -188,8 +190,17 @@ class SwitchController(AbstractController):
 
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
+
+        allow_cool = self._allow_cool and too_hot
+        allow_heat = self._allow_heat and too_cold
+
+        _LOGGER.debug(f"{self.name} ({self._mode}, current: {self._hvac_mode}): "
+                      f"too_hot: {too_hot}, too_cold: {too_cold} "
+                      f"allow_cool: {allow_cool}, allow_heat: {too_cold} "
+                      f"cur: {cur_temp}, target: {target_temp}")  # FIXME:HARDCODE
+
         if self.running:
-            if (self._mode == HVAC_MODE_COOL and too_cold) or (self._mode == HVAC_MODE_HEAT and too_hot):
+            if (self._mode == HVAC_MODE_COOL and not allow_cool) or (self._mode == HVAC_MODE_HEAT and not allow_heat):
                 _LOGGER.info("Turning off %s %s", self.name, self._target_entity_id)
                 await self._async_turn_off()
             elif time is not None:
@@ -197,7 +208,7 @@ class SwitchController(AbstractController):
                 _LOGGER.info("Keep-alive - Turning on %s %s", self.name, self._target_entity_id)
                 await self._async_turn_on()
         else:
-            if (self._mode == HVAC_MODE_COOL and too_hot) or (self._mode == HVAC_MODE_HEAT and too_cold):
+            if (self._mode == HVAC_MODE_COOL and allow_cool) or (self._mode == HVAC_MODE_HEAT and allow_heat):
                 _LOGGER.info("Turning on %s %s", self.name, self._target_entity_id)
                 await self._async_turn_on()
             elif time is not None:

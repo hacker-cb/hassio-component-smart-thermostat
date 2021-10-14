@@ -175,7 +175,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         if cooler is not None:
             self._cooler = SwitchController(
                 'cooler',
-                [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_COOL,
                 cooler,
                 cold_tolerance,
@@ -191,7 +190,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         if heater is not None:
             self._heater = SwitchController(
                 'heater',
-                [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_HEAT,
                 heater,
                 cold_tolerance,

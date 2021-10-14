@@ -1,4 +1,5 @@
 import voluptuous as vol
+from voluptuous import ALLOW_EXTRA
 
 from homeassistant.components.climate import SUPPORT_TARGET_TEMPERATURE, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF
 from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
@@ -36,7 +37,7 @@ KEY_SCHEMA = vol.Schema({
     vol.Required(
         vol.Any(CONF_HEATER, CONF_COOLER),
         msg=f"Must specify at least one: '{CONF_HEATER}' or '{CONF_COOLER}'"): object
-})
+}, extra=ALLOW_EXTRA)
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {

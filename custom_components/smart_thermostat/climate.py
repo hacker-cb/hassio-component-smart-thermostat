@@ -195,7 +195,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         self._hvac_mode = initial_hvac_mode
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
-        self._hvac_list = [HVAC_MODE_OFF, ]
+        self._hvac_list = [HVAC_MODE_OFF]
         self._cur_temp = None
         self._temp_lock = asyncio.Lock()
         self._min_temp = min_temp
@@ -227,9 +227,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
                 hot_tolerance
             )
             self._controllers.append(self._cooler)
+            self._hvac_list.append(HVAC_MODE_COOL)
         else:
             self._cooler = None
-            self._hvac_list.remove(HVAC_MODE_COOL)
 
         # Create heater
         if heater_entity is not None:
@@ -244,12 +244,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
                 hot_tolerance
             )
             self._controllers.append(self._heater)
+            self._hvac_list.append(HVAC_MODE_HEAT)
         else:
             self._heater = None
-            self._hvac_list.remove(HVAC_MODE_HEAT)
 
-        if not (cooler_entity and heater_entity):
-            self._hvac_list.remove(HVAC_MODE_HEAT_COOL)
+        if cooler_entity and heater_entity:
+            self._hvac_list.append(HVAC_MODE_HEAT_COOL)
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""

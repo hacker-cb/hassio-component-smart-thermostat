@@ -5,6 +5,7 @@ forked from HA-core `generic_thermostat` 827501659c926ace3741425760b1294d2e93b48
 import asyncio
 import logging
 import math
+from typing import Optional
 
 import voluptuous as vol
 
@@ -32,7 +33,8 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import CoreState, callback
+from homeassistant.core import CoreState, callback, Context, HomeAssistant
+from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -173,8 +175,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         if cooler is not None:
             self._cooler = SwitchController(
                 'cooler',
-                self.hass,
-                self._context,
                 [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_COOL,
                 cooler,
@@ -183,6 +183,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
             )
             self._controllers.append(self._cooler)
             self._hvac_list.append(HVAC_MODE_COOL)
+            _LOGGER.info(f"Added cooler: {cooler}")
         else:
             self._cooler = None
 
@@ -190,8 +191,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         if heater is not None:
             self._heater = SwitchController(
                 'heater',
-                self.hass,
-                self._context,
                 [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL],
                 HVAC_MODE_HEAT,
                 heater,
@@ -200,11 +199,13 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
             )
             self._controllers.append(self._heater)
             self._hvac_list.append(HVAC_MODE_HEAT)
+            _LOGGER.info(f"Added heater: {heater}")
         else:
             self._heater = None
 
-        if cooler and heater:
+        if self._cooler and self._cooler:
             self._hvac_list.append(HVAC_MODE_HEAT_COOL)
+            _LOGGER.info(f"Allowed Heat/Cool mode")
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""
@@ -283,6 +284,18 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         # Set default state to off
         if not self._hvac_mode:
             self._set_hvac_mode(HVAC_MODE_OFF)
+
+    def add_to_platform_start(self, hass: HomeAssistant, platform: EntityPlatform, parallel_updates: Optional[asyncio.Semaphore]) -> None:
+        # FIXME: Use more ellegant way to receive hass/context
+        super().add_to_platform_start(hass, platform, parallel_updates)
+        for controller in self._controllers:
+            controller.set_hass(hass)
+
+    def async_set_context(self, context: Context) -> None:
+        # FIXME: Use more ellegant way to receive hass/context
+        super().async_set_context(context)
+        for controller in self._controllers:
+            controller.set_context(context)
 
     def _get_default_target_temp(self):
         return (self.max_temp + self.min_temp) / 2

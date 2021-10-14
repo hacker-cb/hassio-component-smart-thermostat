@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import List
+from typing import List, Optional
 
 from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT
@@ -20,15 +20,13 @@ class AbstractController(abc.ABC):
     def __init__(
             self,
             name: str,
-            hass: HomeAssistant,
-            context: Context,
             hvac_modes: List[str],
             mode: str,
             target: {}
     ):
         self._name = name
-        self._hass = hass
-        self._context = context
+        self._hass = Optional[HomeAssistant]
+        self._context = Optional[Context]
         self._mode = mode
         self._supported_hvac_modes = hvac_modes
         self._hvac_mode = HVAC_MODE_OFF
@@ -38,9 +36,16 @@ class AbstractController(abc.ABC):
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
 
+    def set_hass(self, hass: HomeAssistant):
+        self._hass = hass
+
+    def set_context(self, context: Context):
+        self._context = context
+
     def set_hvac_mode(self, hvac_mode: str):
         self._hvac_mode = hvac_mode
 
+    @abc.abstractmethod
     def startup(self):
         """
         Startup method. Will ve called from `async_added_to_hass()`
@@ -50,17 +55,19 @@ class AbstractController(abc.ABC):
         return [self._target_entity_id]
 
     @callback
+    @abc.abstractmethod
     def on_state_changed(self, event):
         """On state changed callback"""
 
     @property
     @abc.abstractmethod
-    def running(self) -> bool:
+    def running(self):
         """Is target running now?"""
 
     @property
     def can_run(self) -> bool:
         """Can controller run according current HVAC modes"""
+        # FIXME: not used not
         return self._hvac_mode in self._supported_hvac_modes
 
     @abc.abstractmethod
@@ -73,20 +80,18 @@ class SwitchController(AbstractController):
     def __init__(
             self,
             name: str,
-            hass: HomeAssistant,
-            context: Context,
             hvac_modes: List[str],
             mode,
             target: {},
             cold_tolerance,
             hot_tolerance
     ):
-        super().__init__(name, hass, context, hvac_modes, mode, target)
+        super().__init__(name, hvac_modes, mode, target)
         self.name = name
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
         self._target_inverted = self._target[CONF_INVERTED]
-        self._min_cycle_duration = self._target[CONF_MIN_DUR]
+        self._min_cycle_duration = self._target[CONF_MIN_DUR] if CONF_MIN_DUR in self._target else None
 
     @property
     def _is_device_active(self):
@@ -123,9 +128,9 @@ class SwitchController(AbstractController):
         ):
             self._hass.create_task(self._check_switch_initial_state())
 
-    @property
-    def running(self) -> bool:
-        return self._is_device_active()
+    @AbstractController.running.getter
+    def running(self):
+        return self._is_device_active
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""
@@ -151,7 +156,9 @@ class SwitchController(AbstractController):
             self._active = True
             _LOGGER.info(
                 "Obtained current and target temperature. "
-                "Smart thermostat active. %s, %s",
+                "Smart thermostat %s (%s). cur: %s, target: %s",
+                "running" if self.running else "not running",
+                self.name,
                 cur_temp,
                 target_temp,
             )

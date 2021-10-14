@@ -156,8 +156,7 @@ class SwitchController(AbstractController):
             self._active = True
             _LOGGER.info(
                 "Obtained current and target temperature. "
-                "Smart thermostat %s (%s). cur: %s, target: %s",
-                "running" if self.running else "not running",
+                "Smart thermostat running (%s). cur: %s, target: %s",
                 self.name,
                 cur_temp,
                 target_temp,

@@ -25,16 +25,19 @@ CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]
+
 TARGET_SCHEMA = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
     vol.Optional(CONF_INVERTED, default=False): bool,
     vol.Optional(CONF_MIN_DUR): cv.positive_time_period
 })
+
 KEY_SCHEMA = vol.Schema({
     vol.Required(
         vol.Any(CONF_HEATER, CONF_COOLER),
         msg=f"Must specify at least one: '{CONF_HEATER}' or '{CONF_COOLER}'"): object
 })
+
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HEATER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),

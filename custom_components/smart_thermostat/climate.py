@@ -66,7 +66,7 @@ PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
 def _extract_target(target):
-    if target is str:
+    if isinstance(target, str):
         return TARGET_SCHEMA({
             CONF_ENTITY_ID: target
         })

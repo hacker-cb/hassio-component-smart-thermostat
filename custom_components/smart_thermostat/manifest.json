@@ -1,6 +1,7 @@
 {
   "domain": "smart_thermostat",
   "name": "Smart Thermostat with auto Heat/Cool modes and PID control support",
+  "version": "v0.1.0",
   "documentation": "https://github.com/jethome-ru/hassio-component-smart-thermostat",
   "dependencies": ["climate", "sensor", "switch", "number", "input_boolean", "input_number"],
   "requirements": ["simple-pid==1.0.1"],

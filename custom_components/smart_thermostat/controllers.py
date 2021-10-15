@@ -78,6 +78,11 @@ class AbstractController(abc.ABC):
         """Is target running now?"""
 
     @property
+    def _target_state(self):
+        """Get target state"""
+        return self._hass.states.get(self._target_entity_id)
+
+    @property
     def _allow_cool(self):
         return self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
 
@@ -109,7 +114,7 @@ class SwitchController(AbstractController):
     @AbstractController.running.getter
     def running(self):
         """If the toggleable device is currently active."""
-        if not self._hass.states.get(self._target_entity_id):
+        if not self._target_state:
             return None
 
         return self._hass.states.is_state(self._target_entity_id, STATE_ON)
@@ -134,8 +139,7 @@ class SwitchController(AbstractController):
             await self._async_turn_off()
 
     def startup(self):
-        switch_state = self._hass.states.get(self._target_entity_id)
-        if switch_state and switch_state.state not in (
+        if self._target_state and self._target_state not in (
                 STATE_UNAVAILABLE,
                 STATE_UNKNOWN,
         ):

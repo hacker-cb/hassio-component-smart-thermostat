@@ -84,11 +84,11 @@ class AbstractController(abc.ABC):
 
     @property
     def _allow_cool(self):
-        return self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
+        return self._mode == HVAC_MODE_COOL and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
 
     @property
     def _allow_heat(self):
-        return self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
+        return self._mode == HVAC_MODE_HEAT and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
 
     @abc.abstractmethod
     async def async_control(self, cur_temp, target_temp, time=None, force=False):
@@ -206,16 +206,20 @@ class SwitchController(AbstractController):
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
 
-        allow_cool = self._allow_cool and too_hot
-        allow_heat = self._allow_heat and too_cold
+        need_run = False
+
+        if self._allow_cool and too_hot:
+            need_run = True
+        elif self._allow_heat and too_cold:
+            need_run = True
 
         _LOGGER.debug(f"{self.name} ({self._mode}, current: {self._hvac_mode}): "
                       f"too_hot: {too_hot}, too_cold: {too_cold} "
-                      f"allow_cool: {allow_cool}, allow_heat: {too_cold} "
+                      f"need_run: {need_run} "
                       f"cur: {cur_temp}, target: {target_temp}")
 
         if self.running:
-            if (self._mode == HVAC_MODE_COOL and not allow_cool) or (self._mode == HVAC_MODE_HEAT and not allow_heat):
+            if not need_run:
                 _LOGGER.info("Turning off %s %s", self.name, self._target_entity_id)
                 await self._async_turn_off()
             elif time is not None:
@@ -223,7 +227,7 @@ class SwitchController(AbstractController):
                 _LOGGER.info("Keep-alive - Turning on %s %s", self.name, self._target_entity_id)
                 await self._async_turn_on()
         else:
-            if (self._mode == HVAC_MODE_COOL and allow_cool) or (self._mode == HVAC_MODE_HEAT and allow_heat):
+            if need_run:
                 _LOGGER.info("Turning on %s %s", self.name, self._target_entity_id)
                 await self._async_turn_on()
             elif time is not None:

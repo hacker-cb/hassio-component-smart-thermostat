@@ -1,5 +1,6 @@
 import abc
 import logging
+from typing import Optional, final
 
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -13,29 +14,32 @@ _LOGGER = logging.getLogger(__name__)
 class Thermostat(abc.ABC):
     @abc.abstractmethod
     def get_hass(self) -> HomeAssistant:
-        """
-        Get HomeAssistant instance
-        """
+        """Get HomeAssistant instance"""
 
     @abc.abstractmethod
     def get_context(self) -> Context:
-        """
-        Get Context instance
-        """
+        """Get Context instance"""
+
+    @abc.abstractmethod
+    def get_target_temperature(self):
+        """Return the target temperature."""
+
+    @abc.abstractmethod
+    def get_current_temperature(self):
+        """Return the sensor temperature."""
 
 
 class AbstractController(abc.ABC):
     """
     Abstract controller
     """
-
     def __init__(
             self,
             name: str,
             mode: str,
             target_entity_id: str
     ):
-        self._thermostat = None
+        self._thermostat: Optional[Thermostat] = None
         self.name = name
         self._mode = mode
         self._hvac_mode = HVAC_MODE_OFF
@@ -90,8 +94,15 @@ class AbstractController(abc.ABC):
     def _allow_heat(self):
         return self._mode == HVAC_MODE_HEAT and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
 
+    @final
+    async def async_control(self, time=None, force=False):
+        """Callback which will be called from Climate Entity"""
+        cur_temp = self._thermostat.get_current_temperature()
+        target_temp = self._thermostat.get_target_temperature()
+        await self._async_control(cur_temp, target_temp, time=time, force=force)
+
     @abc.abstractmethod
-    async def async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
         """Control method. Should be overwritten in child classes"""
 
 
@@ -182,7 +193,7 @@ class SwitchController(AbstractController):
             HA_DOMAIN, service, data, context=self._context
         )
 
-    async def async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
         if not self._active and None not in (
                 cur_temp,
                 target_temp,
@@ -279,6 +290,5 @@ class ClimatePidController(AbstractPidController):
     def running(self):
         raise NotImplementedError()  # FIXME: Not implemented
 
-    async def async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
         raise NotImplementedError()  # FIXME: Not implemented
-

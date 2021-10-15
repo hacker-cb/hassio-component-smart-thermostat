@@ -388,6 +388,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def get_context(self) -> Context:
         return self._context
 
+    def get_target_temperature(self):
+        return self.target_temperature
+
+    def get_current_temperature(self):
+        return self.current_temperature
+
     def _get_default_target_temp(self):
         return (self.max_temp + self.min_temp) / 2
 
@@ -530,7 +536,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         """Call controllers"""
         async with self._temp_lock:
             for controller in self._controllers:
-                await controller.async_control(self._cur_temp, self._target_temp, time=time, force=force)
+                await controller.async_control(time=time, force=force)
 
     @property
     def supported_features(self):

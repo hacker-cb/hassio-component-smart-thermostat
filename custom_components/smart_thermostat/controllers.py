@@ -275,7 +275,7 @@ class ClimatePidController(AbstractPidController):
     def on_state_changed(self, event):
         raise NotImplementedError()  # FIXME: Not implemented
 
-    @property
+    @AbstractController.running.getter
     def running(self):
         raise NotImplementedError()  # FIXME: Not implemented
 

@@ -1,9 +1,8 @@
 import abc
 import logging
 
-from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR, CONF_COLD_TOLERANCE, CONF_HOT_TOLERANCE
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
-from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, CONF_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, HomeAssistant, Context
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
@@ -32,20 +31,21 @@ class AbstractController(abc.ABC):
 
     def __init__(
             self,
-            thermostat: Thermostat,
             name: str,
             mode: str,
-            target: {}
+            target_entity_id: str
     ):
-        self._thermostat = thermostat
+        self._thermostat = None
         self._name = name
         self._mode = mode
         self._hvac_mode = HVAC_MODE_OFF
-        self._target = target
-        self._target_entity_id = target[CONF_ENTITY_ID]
+        self._target_entity_id = target_entity_id
         self._active = False
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
+
+    def set_thermostat(self, thermostat: Thermostat):
+        self._thermostat = thermostat
 
     @property
     def _hass(self) -> HomeAssistant:
@@ -99,17 +99,20 @@ class SwitchController(AbstractController):
 
     def __init__(
             self,
-            thermostat: Thermostat,
             name: str,
             mode,
-            target: {}
+            target_entity_id: str,
+            cold_tolerance: float,
+            hot_tolerance: float,
+            target_inverted: bool,
+            min_cycle_duration
     ):
-        super().__init__(thermostat, name, mode, target)
+        super().__init__(name, mode, target_entity_id)
         self.name = name
-        self._cold_tolerance = self._target[CONF_COLD_TOLERANCE]
-        self._hot_tolerance = self._target[CONF_HOT_TOLERANCE]
-        self._target_inverted = self._target[CONF_INVERTED]
-        self._min_cycle_duration = self._target[CONF_MIN_DUR] if CONF_MIN_DUR in self._target else None
+        self._cold_tolerance = cold_tolerance
+        self._hot_tolerance = hot_tolerance
+        self._target_inverted = target_inverted
+        self._min_cycle_duration = min_cycle_duration
 
     @AbstractController.running.getter
     def running(self):

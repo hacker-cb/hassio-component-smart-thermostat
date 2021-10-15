@@ -51,12 +51,16 @@ from .config import (
     CONF_INITIAL_HVAC_MODE,
     CONF_AWAY_TEMP,
     CONF_PRECISION,
+    CONF_INVERTED,
+    CONF_MIN_DUR,
+    CONF_COLD_TOLERANCE,
+    CONF_HOT_TOLERANCE,
     SUPPORT_FLAGS,
     TARGET_SCHEMA,
     KEY_SCHEMA,
-    DATA_SCHEMA
+    DATA_SCHEMA,
 )
-from .controllers import SwitchController, Thermostat
+from .controllers import SwitchController, Thermostat, AbstractController
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +76,25 @@ def _extract_target(target):
         return target
 
 
+def _create_controller(name: str, mode: str, target_conf) -> AbstractController:
+    entity_id = target_conf[CONF_ENTITY_ID]
+    inverted = target_conf[CONF_INVERTED]
+    min_duration = target_conf[CONF_MIN_DUR] if CONF_MIN_DUR in target_conf else None
+    cold_tolerance = target_conf[CONF_COLD_TOLERANCE]
+    hot_tolerance = target_conf[CONF_HOT_TOLERANCE]
+
+    controller = SwitchController(
+        name,
+        mode,
+        entity_id,
+        cold_tolerance,
+        hot_tolerance,
+        inverted,
+        min_duration
+    )
+    return controller
+
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     """Set up the smart thermostat platform."""
 
@@ -81,8 +104,6 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
 
     name = config.get(CONF_NAME)
-    heater = _extract_target(config.get(CONF_HEATER))
-    cooler = _extract_target(config.get(CONF_COOLER))
     sensor_entity_id = config.get(CONF_SENSOR)
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
@@ -94,12 +115,18 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     unit = hass.config.units.temperature_unit
     unique_id = config.get(CONF_UNIQUE_ID)
 
+    heater_config = _extract_target(config.get(CONF_HEATER))
+    cooler_config = _extract_target(config.get(CONF_COOLER))
+
+    cooler = _create_controller('cooler', HVAC_MODE_COOL, cooler_config) if cooler_config else None
+    heater = _create_controller('heater', HVAC_MODE_HEAT, heater_config) if heater_config else None
+
     async_add_entities(
         [
             SmartThermostat(
                 name,
-                heater,
                 cooler,
+                heater,
                 sensor_entity_id,
                 min_temp,
                 max_temp,
@@ -122,8 +149,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def __init__(
             self,
             name,
-            heater,
-            cooler,
+            cooler: AbstractController,
+            heater: AbstractController,
             sensor_entity_id,
             min_temp,
             max_temp,
@@ -137,6 +164,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     ):
         """Initialize the thermostat."""
         self._name = name
+        self._cooler = cooler
+        self._heater = heater
         self.sensor_entity_id = sensor_entity_id
         self._keep_alive = keep_alive
         self._hvac_mode = initial_hvac_mode
@@ -161,33 +190,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         self._controllers = []
 
-        # Create cooler
-        if cooler is not None:
-            self._cooler = SwitchController(
-                self,
-                'cooler',
-                HVAC_MODE_COOL,
-                cooler
-            )
+        if self._cooler:
+            self._cooler.set_thermostat(self)
             self._controllers.append(self._cooler)
             self._hvac_list.append(HVAC_MODE_COOL)
-            _LOGGER.info(f"Added cooler: {cooler}")
-        else:
-            self._cooler = None
 
-        # Create heater
-        if heater is not None:
-            self._heater = SwitchController(
-                self,
-                'heater',
-                HVAC_MODE_HEAT,
-                heater
-            )
+        if self._heater:
+            self._heater.set_thermostat(self)
             self._controllers.append(self._heater)
             self._hvac_list.append(HVAC_MODE_HEAT)
-            _LOGGER.info(f"Added heater: {heater}")
-        else:
-            self._heater = None
 
         if self._cooler and self._cooler:
             self._hvac_list.append(HVAC_MODE_HEAT_COOL)

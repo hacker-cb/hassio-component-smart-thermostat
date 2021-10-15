@@ -78,7 +78,7 @@ class AbstractController(abc.ABC):
         """Is target running now?"""
 
     @property
-    def _target_state(self):
+    def _target_entity_state(self):
         """Get target state"""
         return self._hass.states.get(self._target_entity_id)
 
@@ -123,19 +123,19 @@ class SwitchController(AbstractController):
             target_entity_id: str,
             cold_tolerance: float,
             hot_tolerance: float,
-            target_inverted: bool,
+            inverted: bool,
             min_cycle_duration
     ):
         super().__init__(name, mode, target_entity_id)
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
-        self._target_inverted = target_inverted
+        self._inverted = inverted
         self._min_cycle_duration = min_cycle_duration
 
     @AbstractController.running.getter
     def running(self):
         """If the toggleable device is currently active."""
-        if not self._target_state:
+        if not self._target_entity_state:
             return None
 
         return self._hass.states.is_state(self._target_entity_id, STATE_ON)
@@ -160,7 +160,7 @@ class SwitchController(AbstractController):
             await self._async_turn_off()
 
     def startup(self):
-        if self._target_state and self._target_state not in (
+        if self._target_entity_state and self._target_entity_state not in (
                 STATE_UNAVAILABLE,
                 STATE_UNKNOWN,
         ):
@@ -168,7 +168,7 @@ class SwitchController(AbstractController):
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""
-        service = SERVICE_TURN_ON if not self._target_inverted else SERVICE_TURN_OFF
+        service = SERVICE_TURN_ON if not self._inverted else SERVICE_TURN_OFF
         data = {ATTR_ENTITY_ID: self._target_entity_id}
         await self._hass.services.async_call(
             HA_DOMAIN, service, data, context=self._context
@@ -176,7 +176,7 @@ class SwitchController(AbstractController):
 
     async def _async_turn_off(self):
         """Turn toggleable device off."""
-        service = SERVICE_TURN_OFF if not self._target_inverted else SERVICE_TURN_ON
+        service = SERVICE_TURN_OFF if not self._inverted else SERVICE_TURN_ON
         data = {ATTR_ENTITY_ID: self._target_entity_id}
         await self._hass.services.async_call(
             HA_DOMAIN, service, data, context=self._context

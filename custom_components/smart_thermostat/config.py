@@ -31,8 +31,8 @@ TARGET_SCHEMA = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
     vol.Optional(CONF_INVERTED, default=False): bool,
     vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
-    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
-    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float)
+    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float,
+    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
 })
 
 KEY_SCHEMA = vol.Schema({

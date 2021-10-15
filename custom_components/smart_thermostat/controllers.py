@@ -36,7 +36,7 @@ class AbstractController(abc.ABC):
             target_entity_id: str
     ):
         self._thermostat = None
-        self._name = name
+        self.name = name
         self._mode = mode
         self._hvac_mode = HVAC_MODE_OFF
         self._target_entity_id = target_entity_id
@@ -127,7 +127,6 @@ class SwitchController(AbstractController):
             min_cycle_duration
     ):
         super().__init__(name, mode, target_entity_id)
-        self.name = name
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
         self._target_inverted = target_inverted

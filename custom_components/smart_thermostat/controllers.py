@@ -28,6 +28,14 @@ class Thermostat(abc.ABC):
     def get_current_temperature(self):
         """Return the sensor temperature."""
 
+    @abc.abstractmethod
+    def async_write_ha_state(self):
+        """Write thermostat state."""
+
+    @abc.abstractmethod
+    def async_on_remove(self):
+        """Add callback"""
+
 
 class AbstractController(abc.ABC):
     """

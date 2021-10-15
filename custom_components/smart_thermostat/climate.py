@@ -27,6 +27,9 @@ from homeassistant.components.climate.const import (
 )
 from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
+from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
+from homeassistant.components.input_number import DOMAIN as INPUT_NUMBER_DOMAIN
+from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_ENTITY_ID,
@@ -49,7 +52,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
-from .controllers import SwitchController, Thermostat, AbstractController
+from .controllers import SwitchController, Thermostat, AbstractController, PidParams, ClimatePidController
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +72,10 @@ CONF_KEEP_ALIVE = "keep_alive"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
+CONF_PID_PARAMS = "pid_params"
+CONF_PID_PARAMS_KP = "kp"
+CONF_PID_PARAMS_KI = "ki"
+CONF_PID_PARAMS_KD = "kd"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]
 
@@ -83,6 +90,15 @@ TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_MIN_DUR): cv.positive_time_period
 })
 
+TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
+    vol.Optional(CONF_PID_PARAMS): {
+        vol.Required(CONF_PID_PARAMS_KP): vol.Coerce(float),
+        vol.Required(CONF_PID_PARAMS_KI): vol.Coerce(float),
+        vol.Required(CONF_PID_PARAMS_KD): vol.Coerce(float)
+    }
+})
+
+
 KEY_SCHEMA = vol.Schema({
     vol.Required(
         vol.Any(CONF_HEATER, CONF_COOLER),
@@ -93,11 +109,11 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Optional(CONF_HEATER): vol.Any(
             cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-            vol.Any(TARGET_SCHEMA_SWITCH)
+            vol.Any(TARGET_SCHEMA_SWITCH, TARGET_SCHEMA_PID_REGULATOR)
         ),
         vol.Optional(CONF_COOLER): vol.Any(
             cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-            vol.Any(TARGET_SCHEMA_SWITCH)
+            vol.Any(TARGET_SCHEMA_SWITCH, TARGET_SCHEMA_PID_REGULATOR)
         ),
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
@@ -154,6 +170,27 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             min_duration
         )
         return controller
+
+    elif domain in [CLIMATE_DOMAIN]:
+        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
+
+        controller = ClimatePidController(
+            name,
+            mode,
+            entity_id,
+            PidParams(
+                conf[CONF_PID_PARAMS_KP],
+                conf[CONF_PID_PARAMS_KI],
+                conf[CONF_PID_PARAMS_KD]
+            ) if conf[CONF_PID_PARAMS] else None
+        )
+        return controller
+
+    elif domain in [NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN]:
+        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
+
+        raise NotImplementedError()  # FIXME: Not implemented
+
     else:
         raise ValueError(f"Unsupported {name} domain: '{domain}'")
 

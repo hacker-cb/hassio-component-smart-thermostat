@@ -95,6 +95,25 @@ class AbstractController(abc.ABC):
         """Control method. Should be overwritten in child classes"""
 
 
+class PidParams(abc.ABC):
+    def __init__(self, kp, ki, kd):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+
+
+class AbstractPidController(AbstractController, abc.ABC):
+    def __init__(
+            self,
+            name: str,
+            mode,
+            target_entity_id: str,
+            pid_params: PidParams
+    ):
+        super().__init__(name, mode, target_entity_id)
+        self._pid_params = pid_params
+
+
 class SwitchController(AbstractController):
 
     def __init__(
@@ -239,3 +258,28 @@ class SwitchController(AbstractController):
                     "Keep-alive - Turning off %s %s", self.name, self._target_entity_id
                 )
                 await self._async_turn_off()
+
+
+class ClimatePidController(AbstractPidController):
+    def __init__(
+            self,
+            name: str,
+            mode,
+            target_entity_id: str,
+            pid_params: PidParams
+    ):
+        super().__init__(name, mode, target_entity_id, pid_params)
+
+    def startup(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    def on_state_changed(self, event):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    @property
+    def running(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    async def async_control(self, cur_temp, target_temp, time=None, force=False):
+        raise NotImplementedError()  # FIXME: Not implemented
+

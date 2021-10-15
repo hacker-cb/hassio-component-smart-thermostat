@@ -1,6 +1,5 @@
 import abc
 import logging
-from typing import List, Optional
 
 from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR, CONF_COLD_TOLERANCE, CONF_HOT_TOLERANCE
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
@@ -12,6 +11,20 @@ from homeassistant.helpers import condition
 _LOGGER = logging.getLogger(__name__)
 
 
+class Thermostat(abc.ABC):
+    @abc.abstractmethod
+    def get_hass(self) -> HomeAssistant:
+        """
+        Get HomeAssistant instance
+        """
+
+    @abc.abstractmethod
+    def get_context(self) -> Context:
+        """
+        Get Context instance
+        """
+
+
 class AbstractController(abc.ABC):
     """
     Abstract controller
@@ -19,13 +32,13 @@ class AbstractController(abc.ABC):
 
     def __init__(
             self,
+            thermostat: Thermostat,
             name: str,
             mode: str,
             target: {}
     ):
+        self._thermostat = thermostat
         self._name = name
-        self._hass = Optional[HomeAssistant]
-        self._context = Optional[Context]
         self._mode = mode
         self._hvac_mode = HVAC_MODE_OFF
         self._target = target
@@ -34,11 +47,13 @@ class AbstractController(abc.ABC):
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
 
-    def set_hass(self, hass: HomeAssistant):
-        self._hass = hass
+    @property
+    def _hass(self) -> HomeAssistant:
+        return self._thermostat.get_hass()
 
-    def set_context(self, context: Context):
-        self._context = context
+    @property
+    def _context(self) -> Context:
+        return self._thermostat.get_context()
 
     def set_hvac_mode(self, hvac_mode: str):
         self._hvac_mode = hvac_mode
@@ -70,7 +85,6 @@ class AbstractController(abc.ABC):
     def _allow_heat(self):
         return self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
 
-
     @abc.abstractmethod
     async def async_control(self, cur_temp, target_temp, time=None, force=False):
         """Control method. Should be overwritten in child classes"""
@@ -80,11 +94,12 @@ class SwitchController(AbstractController):
 
     def __init__(
             self,
+            thermostat: Thermostat,
             name: str,
             mode,
             target: {}
     ):
-        super().__init__(name, mode, target)
+        super().__init__(thermostat, name, mode, target)
         self.name = name
         self._cold_tolerance = self._target[CONF_COLD_TOLERANCE]
         self._hot_tolerance = self._target[CONF_HOT_TOLERANCE]

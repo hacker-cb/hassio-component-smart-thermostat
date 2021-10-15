@@ -5,7 +5,6 @@ forked from HA-core `generic_thermostat` 827501659c926ace3741425760b1294d2e93b48
 import asyncio
 import logging
 import math
-from typing import Optional
 
 import voluptuous as vol
 
@@ -34,7 +33,6 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import CoreState, callback, Context, HomeAssistant
-from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -49,8 +47,6 @@ from .config import (
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
     CONF_TARGET_TEMP,
-    CONF_COLD_TOLERANCE,
-    CONF_HOT_TOLERANCE,
     CONF_KEEP_ALIVE,
     CONF_INITIAL_HVAC_MODE,
     CONF_AWAY_TEMP,
@@ -60,7 +56,7 @@ from .config import (
     KEY_SCHEMA,
     DATA_SCHEMA
 )
-from .controllers import SwitchController
+from .controllers import SwitchController, Thermostat
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,7 +116,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
 
 # noinspection PyAbstractClass
-class SmartThermostat(ClimateEntity, RestoreEntity):
+class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     """Representation of a Smart Thermostat device."""
 
     def __init__(
@@ -168,6 +164,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         # Create cooler
         if cooler is not None:
             self._cooler = SwitchController(
+                self,
                 'cooler',
                 HVAC_MODE_COOL,
                 cooler
@@ -181,6 +178,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         # Create heater
         if heater is not None:
             self._heater = SwitchController(
+                self,
                 'heater',
                 HVAC_MODE_HEAT,
                 heater
@@ -273,17 +271,11 @@ class SmartThermostat(ClimateEntity, RestoreEntity):
         if not self._hvac_mode:
             self._set_hvac_mode(HVAC_MODE_OFF)
 
-    def add_to_platform_start(self, hass: HomeAssistant, platform: EntityPlatform, parallel_updates: Optional[asyncio.Semaphore]) -> None:
-        # FIXME: Use more ellegant way to receive hass/context
-        super().add_to_platform_start(hass, platform, parallel_updates)
-        for controller in self._controllers:
-            controller.set_hass(hass)
+    def get_hass(self) -> HomeAssistant:
+        return self.hass
 
-    def async_set_context(self, context: Context) -> None:
-        # FIXME: Use more ellegant way to receive hass/context
-        super().async_set_context(context)
-        for controller in self._controllers:
-            controller.set_context(context)
+    def get_context(self) -> Context:
+        return self._context
 
     def _get_default_target_temp(self):
         return (self.max_temp + self.min_temp) / 2

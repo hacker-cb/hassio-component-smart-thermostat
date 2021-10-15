@@ -72,12 +72,15 @@ CONF_PRECISION = "precision"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]
 
-TARGET_SCHEMA = vol.Schema({
+TARGET_SCHEMA_COMMON = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
     vol.Optional(CONF_INVERTED, default=False): bool,
-    vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
     vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float,
     vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
+})
+
+TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
+    vol.Optional(CONF_MIN_DUR): cv.positive_time_period
 })
 
 KEY_SCHEMA = vol.Schema({
@@ -88,8 +91,14 @@ KEY_SCHEMA = vol.Schema({
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
-        vol.Optional(CONF_HEATER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
-        vol.Optional(CONF_COOLER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
+        vol.Optional(CONF_HEATER): vol.Any(
+            cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
+            vol.Any(TARGET_SCHEMA_SWITCH)
+        ),
+        vol.Optional(CONF_COOLER): vol.Any(
+            cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
+            vol.Any(TARGET_SCHEMA_SWITCH)
+        ),
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
@@ -111,32 +120,42 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
-def _extract_target(target):
+def _extract_target(target, schema):
     if isinstance(target, str):
-        return TARGET_SCHEMA({
+        return schema({
             CONF_ENTITY_ID: target
         })
     else:
         return target
 
 
-def _create_controller(name: str, mode: str, target_conf) -> AbstractController:
-    entity_id = target_conf[CONF_ENTITY_ID]
-    inverted = target_conf[CONF_INVERTED]
-    min_duration = target_conf[CONF_MIN_DUR] if CONF_MIN_DUR in target_conf else None
-    cold_tolerance = target_conf[CONF_COLD_TOLERANCE]
-    hot_tolerance = target_conf[CONF_HOT_TOLERANCE]
+def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
+    # First use common schema
+    conf = _extract_target(raw_conf, TARGET_SCHEMA_COMMON)
 
-    controller = SwitchController(
-        name,
-        mode,
-        entity_id,
-        cold_tolerance,
-        hot_tolerance,
-        inverted,
-        min_duration
-    )
-    return controller
+    entity_id = conf[CONF_ENTITY_ID]
+    inverted = conf[CONF_INVERTED]
+    cold_tolerance = conf[CONF_COLD_TOLERANCE]
+    hot_tolerance = conf[CONF_HOT_TOLERANCE]
+
+    domain, _ = entity_id.split('.')
+
+    if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
+        conf = _extract_target(raw_conf, TARGET_SCHEMA_SWITCH)
+        min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
+
+        controller = SwitchController(
+            name,
+            mode,
+            entity_id,
+            cold_tolerance,
+            hot_tolerance,
+            inverted,
+            min_duration
+        )
+        return controller
+    else:
+        raise ValueError(f"Unsupported {name} domain: '{domain}'")
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -159,8 +178,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     unit = hass.config.units.temperature_unit
     unique_id = config.get(CONF_UNIQUE_ID)
 
-    heater_config = _extract_target(config.get(CONF_HEATER))
-    cooler_config = _extract_target(config.get(CONF_COOLER))
+    heater_config = config.get(CONF_HEATER)
+    cooler_config = config.get(CONF_COOLER)
 
     cooler = _create_controller('cooler', HVAC_MODE_COOL, cooler_config) if cooler_config else None
     heater = _create_controller('heater', HVAC_MODE_HEAT, heater_config) if heater_config else None

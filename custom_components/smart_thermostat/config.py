@@ -43,8 +43,8 @@ KEY_SCHEMA = vol.Schema({
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
-        vol.Required(CONF_HEATER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
-        vol.Required(CONF_COOLER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
+        vol.Optional(CONF_HEATER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
+        vol.Optional(CONF_COOLER): vol.Any(cv.entity_domain(SUPPORTED_TARGET_DOMAINS), TARGET_SCHEMA),
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,

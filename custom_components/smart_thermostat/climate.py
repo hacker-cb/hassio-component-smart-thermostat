@@ -316,15 +316,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         )
 
         for controller in self._controllers:
-            def state_changed_callback(event):
-                controller.on_state_changed(event)
-                self.async_write_ha_state()
-
-            self.async_on_remove(
-                async_track_state_change_event(
-                    self.hass, controller.get_entities_to_subscribe_state_changes(), state_changed_callback
-                )
-            )
+            await controller.async_init()
 
         if self._keep_alive:
             self.async_on_remove(
@@ -344,8 +336,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._async_update_temp(sensor_state)
                 self.async_write_ha_state()
 
-                for contr in self._controllers:
-                    contr.startup()
+            for contr in self._controllers:
+                contr.startup()
 
         if self.hass.state == CoreState.running:
             _async_startup()

@@ -4,9 +4,10 @@ from typing import Optional, final
 
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import DOMAIN as HA_DOMAIN, callback, HomeAssistant, Context
+from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
+from homeassistant.helpers.event import async_track_state_change_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class Thermostat(abc.ABC):
         """Write thermostat state."""
 
     @abc.abstractmethod
-    def async_on_remove(self):
+    def async_on_remove(self, func: CALLBACK_TYPE) -> None:
         """Add callback"""
 
 
@@ -70,18 +71,25 @@ class AbstractController(abc.ABC):
     def set_hvac_mode(self, hvac_mode: str):
         self._hvac_mode = hvac_mode
 
+    async def async_init(self):
+        """Will be called in Entity async_added_to_hass()"""
+
+        self._thermostat.async_on_remove(
+           async_track_state_change_event(
+                self._hass, [self._target_entity_id], self._on_target_entity_state_changed
+            )
+        )
+        self._thermostat.async_write_ha_state()
+
     @abc.abstractmethod
     def startup(self):
         """
-        Startup method. Will ve called from `async_added_to_hass()`
+        Startup method. Will ve called after HA core started
         """
-
-    def get_entities_to_subscribe_state_changes(self):
-        return [self._target_entity_id]
 
     @callback
     @abc.abstractmethod
-    def on_state_changed(self, event):
+    def _on_target_entity_state_changed(self, event: Event):
         """On state changed callback"""
 
     @property
@@ -160,7 +168,7 @@ class SwitchController(AbstractController):
         return self._hass.states.is_state(self._target_entity_id, STATE_ON)
 
     @callback
-    def on_state_changed(self, event):
+    def _on_target_entity_state_changed(self, event):
         """Handle switch state changes."""
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
@@ -287,12 +295,6 @@ class ClimatePidController(AbstractPidController):
             pid_params: PidParams
     ):
         super().__init__(name, mode, target_entity_id, pid_params)
-
-    def startup(self):
-        raise NotImplementedError()  # FIXME: Not implemented
-
-    def on_state_changed(self, event):
-        raise NotImplementedError()  # FIXME: Not implemented
 
     @AbstractController.running.getter
     def running(self):

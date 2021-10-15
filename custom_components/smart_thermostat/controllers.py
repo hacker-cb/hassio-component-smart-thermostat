@@ -81,16 +81,17 @@ class AbstractController(abc.ABC):
         )
         self._thermostat.async_write_ha_state()
 
-    @abc.abstractmethod
     def startup(self):
         """
         Startup method. Will ve called after HA core started
         """
+        self._hass.create_task(self.async_control())
 
     @callback
-    @abc.abstractmethod
     def _on_target_entity_state_changed(self, event: Event):
         """On state changed callback"""
+        _ = event
+        self._hass.create_task(self.async_control())
 
     @property
     @abc.abstractmethod
@@ -167,32 +168,6 @@ class SwitchController(AbstractController):
 
         return self._hass.states.is_state(self._target_entity_id, STATE_ON)
 
-    @callback
-    def _on_target_entity_state_changed(self, event):
-        """Handle switch state changes."""
-        new_state = event.data.get("new_state")
-        old_state = event.data.get("old_state")
-        if new_state is None:
-            return
-        if old_state is None:
-            self._hass.create_task(self._check_switch_initial_state())
-
-    async def _check_switch_initial_state(self):
-        """Prevent the device from keep running if HVAC_MODE_OFF."""
-        if self._hvac_mode == HVAC_MODE_OFF and self.running:
-            _LOGGER.warning(
-                "The climate mode is OFF, but the switch device is ON. Turning off device %s",
-                self._target_entity_id,
-            )
-            await self._async_turn_off()
-
-    def startup(self):
-        if self._target_entity_state and self._target_entity_state not in (
-                STATE_UNAVAILABLE,
-                STATE_UNKNOWN,
-        ):
-            self._hass.create_task(self._check_switch_initial_state())
-
     async def _async_turn_on(self):
         """Turn toggleable device on."""
         service = SERVICE_TURN_ON if not self._inverted else SERVICE_TURN_OFF
@@ -223,8 +198,12 @@ class SwitchController(AbstractController):
                 target_temp,
             )
 
+        # FIXME: Move upper
         if self._hvac_mode == HVAC_MODE_OFF and self.running:
             await self._async_turn_off()
+
+        #TODO: handle STATE_UNAVAILABLE/STATE_UNKNOWN (may be from base class), ad
+
 
         if not self._active or self._hvac_mode == HVAC_MODE_OFF:
             return

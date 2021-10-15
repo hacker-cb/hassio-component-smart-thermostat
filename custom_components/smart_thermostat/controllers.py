@@ -2,7 +2,7 @@ import abc
 import logging
 from typing import List, Optional
 
-from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR
+from custom_components.smart_thermostat.config import CONF_INVERTED, CONF_MIN_DUR, CONF_COLD_TOLERANCE, CONF_HOT_TOLERANCE
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, CONF_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, HomeAssistant, Context
@@ -82,14 +82,12 @@ class SwitchController(AbstractController):
             self,
             name: str,
             mode,
-            target: {},
-            cold_tolerance,
-            hot_tolerance
+            target: {}
     ):
         super().__init__(name, mode, target)
         self.name = name
-        self._cold_tolerance = cold_tolerance
-        self._hot_tolerance = hot_tolerance
+        self._cold_tolerance = self._target[CONF_COLD_TOLERANCE]
+        self._hot_tolerance = self._target[CONF_HOT_TOLERANCE]
         self._target_inverted = self._target[CONF_INVERTED]
         self._min_cycle_duration = self._target[CONF_MIN_DUR] if CONF_MIN_DUR in self._target else None
 

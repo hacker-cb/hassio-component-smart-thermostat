@@ -53,7 +53,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
-from .controllers import SwitchController, Thermostat, AbstractController, PidParams, ClimatePidController
+from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, ClimatePidController
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,6 +172,22 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
         )
         return controller
 
+    elif domain in [NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN]:
+        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
+
+        controller = NumberPidController(
+            name,
+            mode,
+            entity_id,
+            PidParams(
+                conf[CONF_PID_PARAMS_KP],
+                conf[CONF_PID_PARAMS_KI],
+                conf[CONF_PID_PARAMS_KD]
+            ) if conf[CONF_PID_PARAMS] else None,
+            inverted
+        )
+        return controller
+
     elif domain in [CLIMATE_DOMAIN]:
         conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
 
@@ -187,11 +203,6 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             inverted
         )
         return controller
-
-    elif domain in [NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN]:
-        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
-
-        raise NotImplementedError()  # FIXME: Not implemented
 
     else:
         raise ValueError(f"Unsupported {name} domain: '{domain}'")
@@ -451,9 +462,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         """
         if self._hvac_mode == HVAC_MODE_OFF:
             return CURRENT_HVAC_OFF
-        if self._cooler and self._cooler.is_working():
+        if self._cooler and self._cooler.running and self._cooler.is_working():
             return CURRENT_HVAC_COOL
-        if self._heater and self._heater.is_working():
+        if self._heater and self._heater.running and self._heater.is_working():
             return CURRENT_HVAC_HEAT
         return CURRENT_HVAC_IDLE
 

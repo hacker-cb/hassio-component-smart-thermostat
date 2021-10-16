@@ -208,9 +208,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._current_pid_params = Optional[PidParams]
         self._pid = Optional[PID]
 
-    def is_working(self):
-        raise NotImplementedError()  # FIXME: Not implemented
-
     @final
     async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
         await super().async_added_to_hass(hass, old_state)
@@ -298,10 +295,14 @@ class AbstractPidController(AbstractController, abc.ABC):
                      pid_params,
                      current_output
                      )
+
+        await self._async_turn_on()
+
         return True
 
     @final
     async def _async_stop(self):
+        await self._async_turn_off()
         self._pid = None
         pass
 
@@ -329,6 +330,14 @@ class AbstractPidController(AbstractController, abc.ABC):
                           current_output
                           )
             self._apply_output(output)
+
+    @abc.abstractmethod
+    async def _async_turn_on(self):
+        """Turn on target"""
+
+    @abc.abstractmethod
+    async def _async_turn_off(self):
+        """Turn off target"""
 
     @abc.abstractmethod
     def _get_output_limits(self):
@@ -461,6 +470,33 @@ class SwitchController(AbstractController):
                 await self._async_turn_off()
 
 
+class NumberPidController(AbstractPidController):
+    def __init__(
+            self,
+            name: str,
+            mode,
+            target_entity_id: str,
+            pid_params: PidParams,
+            inverted: bool
+    ):
+        super().__init__(name, mode, target_entity_id, pid_params, inverted)
+
+    def is_working(self):
+        return True
+
+    async def _async_turn_on(self):
+        pass
+
+    async def _async_turn_off(self):
+        pass
+
+    def _get_output_limits(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    def _apply_output(self, output: float):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+
 class ClimatePidController(AbstractPidController):
     def __init__(
             self,
@@ -471,3 +507,18 @@ class ClimatePidController(AbstractPidController):
             inverted: bool
     ):
         super().__init__(name, mode, target_entity_id, pid_params, inverted)
+
+    def is_working(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    async def _async_turn_on(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    async def _async_turn_off(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    def _get_output_limits(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    def _apply_output(self, output: float):
+        raise NotImplementedError()  # FIXME: Not implemented

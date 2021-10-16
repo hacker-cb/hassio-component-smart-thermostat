@@ -368,9 +368,6 @@ class SwitchController(AbstractController):
     @AbstractController.running.getter
     def running(self):
         """If the toggleable device is currently active."""
-        if not self._target_entity_state:
-            return None
-
         return self._hass.states.is_state(self._target_entity_id, STATE_ON)
 
     async def _async_turn_on(self):

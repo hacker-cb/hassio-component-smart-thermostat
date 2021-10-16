@@ -61,12 +61,14 @@ class AbstractController(abc.ABC):
             self,
             name: str,
             mode: str,
-            target_entity_id: str
+            target_entity_id: str,
+            inverted: bool
     ):
         self._thermostat: Optional[Thermostat] = None
         self.name = name
         self._mode = mode
         self._target_entity_id = target_entity_id
+        self._inverted = inverted
         self._active = False
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
@@ -154,9 +156,10 @@ class AbstractPidController(AbstractController, abc.ABC):
             name: str,
             mode,
             target_entity_id: str,
-            pid_params: PidParams
+            pid_params: PidParams,
+            inverted: bool
     ):
-        super().__init__(name, mode, target_entity_id)
+        super().__init__(name, mode, target_entity_id, inverted)
         self._initial_pid_params = pid_params
         self._current_pid_params = Optional[PidParams]
 
@@ -203,10 +206,9 @@ class SwitchController(AbstractController):
             inverted: bool,
             min_cycle_duration
     ):
-        super().__init__(name, mode, target_entity_id)
+        super().__init__(name, mode, target_entity_id, inverted)
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
-        self._inverted = inverted
         self._min_cycle_duration = min_cycle_duration
 
     @AbstractController.running.getter
@@ -334,9 +336,10 @@ class ClimatePidController(AbstractPidController):
             name: str,
             mode,
             target_entity_id: str,
-            pid_params: PidParams
+            pid_params: PidParams,
+            inverted: bool
     ):
-        super().__init__(name, mode, target_entity_id, pid_params)
+        super().__init__(name, mode, target_entity_id, pid_params, inverted)
 
     @AbstractController.running.getter
     def running(self):

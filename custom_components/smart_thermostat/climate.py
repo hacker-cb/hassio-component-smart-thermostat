@@ -183,7 +183,8 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
                 conf[CONF_PID_PARAMS_KP],
                 conf[CONF_PID_PARAMS_KI],
                 conf[CONF_PID_PARAMS_KD]
-            ) if conf[CONF_PID_PARAMS] else None
+            ) if conf[CONF_PID_PARAMS] else None,
+            inverted
         )
         return controller
 

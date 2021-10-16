@@ -1,13 +1,15 @@
 import abc
 import logging
-from typing import Optional, final
+from typing import Optional, final, Mapping, Any
 
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE
+from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
 from homeassistant.helpers.event import async_track_state_change_event
+
+ATTR_PID_PARAMS = "pid_params"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +47,10 @@ class Thermostat(abc.ABC):
     def async_on_remove(self, func: CALLBACK_TYPE) -> None:
         """Add callback"""
 
+    @abc.abstractmethod
+    async def async_get_last_state(self) -> Optional[State]:
+        """Get last saved sate"""
+
 
 class AbstractController(abc.ABC):
     """
@@ -79,6 +85,10 @@ class AbstractController(abc.ABC):
     @property
     def _context(self) -> Context:
         return self._thermostat.get_context()
+
+    @property
+    def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
+        return None
 
     async def async_added_to_hass(self):
         """Will be called in Entity async_added_to_hass()"""
@@ -147,7 +157,38 @@ class AbstractPidController(AbstractController, abc.ABC):
             pid_params: PidParams
     ):
         super().__init__(name, mode, target_entity_id)
-        self._pid_params = pid_params
+        self._initial_pid_params = pid_params
+        self._current_pid_params = Optional[PidParams]
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+
+        old_state = await self._thermostat.async_get_last_state()
+
+        if old_state is not None and old_state.attributes.get(ATTR_PID_PARAMS) is not None:
+            saved_pid_params = old_state.attributes.get(ATTR_PID_PARAMS)
+            if saved_pid_params:
+                kp, ki, kd = saved_pid_params.split(',')
+                self._current_pid_params = PidParams(kp, ki, kd)
+                _LOGGER.info("%s: %s - restored last PID params: %s",
+                             self._thermostat.get_entity_id,
+                             self.name,
+                             self._current_pid_params
+                             )
+        if not self._current_pid_params:
+            self._current_pid_params = self._initial_pid_params
+            _LOGGER.info("%s: %s - No PID params found in state attributes, using default: %s",
+                         self._thermostat.get_entity_id,
+                         self.name,
+                         self._current_pid_params if self._current_pid_params else None
+                         )
+
+    @property
+    def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
+        p = self._current_pid_params
+        return {
+            ATTR_PID_PARAMS: f"{p.kp},{p.ki},{p.kd}" if p else None
+        }
 
 
 class SwitchController(AbstractController):

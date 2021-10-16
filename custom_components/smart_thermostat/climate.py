@@ -5,6 +5,7 @@ forked from HA-core `generic_thermostat` 827501659c926ace3741425760b1294d2e93b48
 import asyncio
 import logging
 import math
+from typing import Mapping, Any, Optional
 
 import voluptuous as vol
 from voluptuous import ALLOW_EXTRA
@@ -464,6 +465,13 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def hvac_modes(self):
         """List of available operation modes."""
         return self._hvac_list
+
+    @property
+    def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
+        attrs = {}
+        for controller in self._controllers:
+            attrs = {**attrs, ** controller.extra_state_attributes}
+        return attrs
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""

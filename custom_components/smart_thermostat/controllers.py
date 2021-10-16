@@ -42,7 +42,7 @@ class Thermostat(abc.ABC):
         """Return the sensor temperature."""
 
     @abc.abstractmethod
-    def async_write_ha_state(self):
+    def async_write_ha_state(self) -> None:
         """Write thermostat state."""
 
     @abc.abstractmethod

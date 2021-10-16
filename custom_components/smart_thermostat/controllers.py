@@ -80,9 +80,8 @@ class AbstractController(abc.ABC):
     def _context(self) -> Context:
         return self._thermostat.get_context()
 
-    async def async_init(self):
+    async def async_added_to_hass(self):
         """Will be called in Entity async_added_to_hass()"""
-
         self._thermostat.async_on_remove(
             async_track_state_change_event(
                 self._hass, [self._target_entity_id], self._on_target_entity_state_changed
@@ -90,7 +89,7 @@ class AbstractController(abc.ABC):
         )
         self._thermostat.async_write_ha_state()
 
-    def startup(self):
+    def async_startup(self):
         """
         Startup method. Will ve called after HA core started
         """

@@ -315,7 +315,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         )
 
         for controller in self._controllers:
-            await controller.async_init()
+            await controller.async_added_to_hass()
 
         if self._keep_alive:
             self.async_on_remove(
@@ -338,7 +338,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             _LOGGER.info("%s: Started, supported HVAC modes: %s", self.name, self._hvac_list)
 
             for contr in self._controllers:
-                contr.startup()
+                contr.async_startup()
 
         if self.hass.state == CoreState.running:
             _async_startup()

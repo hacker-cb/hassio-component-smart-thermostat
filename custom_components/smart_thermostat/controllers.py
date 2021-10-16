@@ -4,8 +4,13 @@ from typing import Optional, final, Mapping, Any
 
 from simple_pid import PID
 
-from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
-from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF
+from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
+from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL, ATTR_HVAC_ACTION
+from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
+    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP
+from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
+from homeassistant.const import STATE_OFF
+from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
@@ -278,11 +283,23 @@ class AbstractPidController(AbstractController, abc.ABC):
             _LOGGER.error("%s: %s - Start called but no PID params was set", self._thermostat_entity_id, self.name)
             return False
 
+        output_limits = self._get_output_limits()
+        min_temp, max_temp = output_limits
+
+        if not min_temp or not max_temp:
+            _LOGGER.error(
+                "%s: %s - Invalid output limits: (%s, %s)",
+                self._thermostat_entity_id, self.name,
+                min_temp, max_temp
+            )
+            return False
+
         pid_params = self._current_pid_params
+
         self._pid = PID(
             pid_params.kp, pid_params.ki, pid_params.kp,
             setpoint=target_temp,
-            output_limits=self._get_output_limits()
+            output_limits=output_limits
         )
 
         current_output = self._hass.states.get(self._target_entity_id)
@@ -306,7 +323,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid = None
         pass
 
-    @final
     async def _async_control(self, cur_temp, target_temp, time=None, force=False):
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
@@ -340,7 +356,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Turn off target"""
 
     @abc.abstractmethod
-    def _get_output_limits(self):
+    def _get_output_limits(self) -> (None, None):
         """Get output limits (min,max)"""
 
     @abc.abstractmethod
@@ -492,10 +508,24 @@ class NumberPidController(AbstractPidController):
         pass
 
     def _get_output_limits(self):
-        raise NotImplementedError()  # FIXME: Not implemented
+        min_temp = None
+        max_temp = None
+
+        state: State = self._hass.states.get(self._target_entity_id)
+        if state:
+            min_temp = state.attributes.get(ATTR_MIN)
+            max_temp = state.attributes.get(ATTR_MAX)
+
+        return min_temp, max_temp
 
     def _apply_output(self, output: float):
-        raise NotImplementedError()  # FIXME: Not implemented
+        domain, _ = self._target_entity_id.split('.')
+        await self._hass.services.async_call(
+            domain, SERVICE_SET_VALUE, {
+                ATTR_ENTITY_ID: self._target_entity_id,
+                ATTR_VALUE: output
+            }, context=self._context
+        )
 
 
 class ClimatePidController(AbstractPidController):
@@ -510,16 +540,65 @@ class ClimatePidController(AbstractPidController):
         super().__init__(name, mode, target_entity_id, pid_params, inverted)
 
     def is_working(self):
-        raise NotImplementedError()  # FIXME: Not implemented
+        state: State = self._hass.states.get(self._target_entity_id)
+        if not state:
+            return False
+        hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
+        return hvac_action != CURRENT_HVAC_IDLE
 
     async def _async_turn_on(self):
-        raise NotImplementedError()  # FIXME: Not implemented
+        await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_ON, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
 
     async def _async_turn_off(self):
-        raise NotImplementedError()  # FIXME: Not implemented
+        await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_OFF, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
 
-    def _get_output_limits(self):
-        raise NotImplementedError()  # FIXME: Not implemented
+    def _get_output_limits(self) -> (None, None):
+        min_temp = None
+        max_temp = None
+
+        state: State = self._hass.states.get(self._target_entity_id)
+        if state:
+            min_temp = state.attributes.get(ATTR_MIN_TEMP)
+            max_temp = state.attributes.get(ATTR_MAX_TEMP)
+
+        return min_temp, max_temp
 
     def _apply_output(self, output: float):
-        raise NotImplementedError()  # FIXME: Not implemented
+        await self._hass.services.async_call(
+            CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE, {
+                ATTR_ENTITY_ID: self._target_entity_id,
+                ATTR_TEMPERATURE: output
+            }, context=self._context
+        )
+
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+        state: State = self._hass.states.get(self._target_entity_id)
+        if state:
+            new_hvac_mode = None
+
+            if self._mode == HVAC_MODE_COOL and state.state != HVAC_MODE_COOL:
+                new_hvac_mode = HVAC_MODE_COOL
+            elif self._mode == HVAC_MODE_HEAT and state.state != HVAC_MODE_HEAT:
+                new_hvac_mode = HVAC_MODE_HEAT
+
+            if new_hvac_mode:
+                _LOGGER.debug(
+                    "%s: %s - Setting HVAC mode to %s",
+                    self._thermostat_entity_id,
+                    self.name,
+                    new_hvac_mode
+                )
+                data = {
+                    ATTR_ENTITY_ID: self._target_entity_id,
+                    ATTR_HVAC_MODE: new_hvac_mode
+                }
+                await self._hass.services.async_call(
+                    CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE, data, context=self._context
+                )
+
+        # call parent
+        await super()._async_control(cur_temp, target_temp, time, force)

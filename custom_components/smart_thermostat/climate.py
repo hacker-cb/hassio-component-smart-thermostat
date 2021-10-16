@@ -172,7 +172,7 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
         )
         return controller
 
-    elif domain in [NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN]:
+    elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
         conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
 
         controller = NumberPidController(

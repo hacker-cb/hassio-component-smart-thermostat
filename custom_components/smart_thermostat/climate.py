@@ -302,7 +302,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         if self._cooler and self._cooler:
             self._hvac_list.append(HVAC_MODE_HEAT_COOL)
-            _LOGGER.info(f"Allowed Heat/Cool mode")
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""
@@ -336,6 +335,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._async_update_temp(sensor_state)
                 self.async_write_ha_state()
 
+            _LOGGER.info("%s: Started, supported HVAC modes: %s", self.name, self._hvac_list)
+
             for contr in self._controllers:
                 contr.startup()
 
@@ -353,7 +354,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 if old_state.attributes.get(ATTR_TEMPERATURE) is None:
                     self._target_temp = self._get_default_target_temp()
                     _LOGGER.warning(
-                        "Undefined target temperature, falling back to %s",
+                        "%S: Undefined target temperature, falling back to %s",
+                        self.name,
                         self._target_temp,
                     )
                 else:
@@ -361,21 +363,27 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             if old_state.attributes.get(ATTR_PRESET_MODE) in self._attr_preset_modes:
                 self._attr_preset_mode = old_state.attributes.get(ATTR_PRESET_MODE)
             if not self._hvac_mode and old_state.state:
-                self._set_hvac_mode(old_state.state)
+                self._hvac_mode = old_state.state
 
         else:
             # No previous state, try and restore defaults
             self._target_temp = self._get_default_target_temp()
             _LOGGER.warning(
-                "No previously saved temperature, setting to %s", self._target_temp
+                "%s: No previously saved temperature, setting to %s", self.name, self._target_temp
             )
 
         # Set default state to off
         if not self._hvac_mode:
-            self._set_hvac_mode(HVAC_MODE_OFF)
+            self._hvac_mode = HVAC_MODE_OFF
 
     def get_hass(self) -> HomeAssistant:
         return self.hass
+
+    def get_entity_name(self) -> str:
+        return self.name
+
+    def get_hvac_mode(self) -> str:
+        return self.hvac_mode
 
     def get_context(self) -> Context:
         return self._context
@@ -457,19 +465,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         """List of available operation modes."""
         return self._hvac_list
 
-    def _set_hvac_mode(self, hvac_mode: str):
-        _LOGGER.info(f"Setting HVAC mode from {self._hvac_mode} to {hvac_mode}")
-        self._hvac_mode = hvac_mode
-        for controller in self._controllers:
-            controller.set_hvac_mode(hvac_mode)
-
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
-        self._set_hvac_mode(hvac_mode)
 
         if hvac_mode not in self._hvac_list:
-            _LOGGER.error("Unrecognized hvac mode: %s", hvac_mode)
+            _LOGGER.error("%s: Unrecognized hvac mode: %s", self.name, hvac_mode)
             return
+
+        self._hvac_mode = hvac_mode
 
         await self._async_control(force=True)
 
@@ -522,7 +525,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 raise ValueError(f"Sensor has illegal state {state.state}")
             self._cur_temp = cur_temp
         except ValueError as ex:
-            _LOGGER.error("Unable to update from sensor: %s", ex)
+            _LOGGER.error("%s: Unable to update from sensor: %s", self.name, ex)
 
     async def _async_control(self, time=None, force=False):
         """Call controllers"""

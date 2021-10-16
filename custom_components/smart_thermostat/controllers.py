@@ -116,29 +116,13 @@ class AbstractController(abc.ABC):
         _ = event
         self._hass.create_task(self.async_control())
 
-    @property
     @abc.abstractmethod
-    def heating(self):
-        """Is target heating now?"""
-
-    @property
-    @abc.abstractmethod
-    def cooling(self):
-        """Is target cooling now?"""
+    def is_working(self):
+        """Is target working now?"""
 
     @abc.abstractmethod
     async def _async_stop(self):
         """Stop target"""
-
-    @property
-    @final
-    def _allow_cool(self):
-        return self._mode == HVAC_MODE_COOL and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
-
-    @property
-    @final
-    def _allow_heat(self):
-        return self._mode == HVAC_MODE_HEAT and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
 
     @final
     async def async_control(self, time=None, force=False):
@@ -219,12 +203,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._current_pid_params = Optional[PidParams]
         self._pid = Optional[PID]
 
-    @AbstractController.heating.getter
-    def heating(self):
-        raise NotImplementedError()  # FIXME: Not implemented
-
-    @AbstractController.cooling.getter
-    def cooling(self):
+    def is_working(self):
         raise NotImplementedError()  # FIXME: Not implemented
 
     @final
@@ -367,13 +346,8 @@ class SwitchController(AbstractController):
         self._hot_tolerance = hot_tolerance
         self._min_cycle_duration = min_cycle_duration
 
-    @AbstractController.heating.getter
-    def heating(self):
-        return self._mode == HVAC_MODE_HEAT and self._hass.states.is_state(self._target_entity_id, STATE_ON)
-
-    @AbstractController.cooling.getter
-    def cooling(self):
-        return self._mode == HVAC_MODE_COOL and self._hass.states.is_state(self._target_entity_id, STATE_ON)
+    def is_working(self):
+        return self._is_on()
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""
@@ -392,7 +366,7 @@ class SwitchController(AbstractController):
         )
 
     def _is_on(self):
-        self._hass.states.is_state(self._target_entity_id, STATE_ON)
+        return self._hass.states.is_state(self._target_entity_id, STATE_ON)
 
     async def _async_stop(self):
         await self._async_turn_off()
@@ -427,25 +401,30 @@ class SwitchController(AbstractController):
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
 
-        need_run = False
+        need_turn_on = False
+        if (
+                too_hot and
+                self._mode == HVAC_MODE_COOL and
+                self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
+        ) or (
+                too_cold and
+                self._mode == HVAC_MODE_HEAT and
+                self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
+        ):
+            need_turn_on = True
 
-        if self._allow_cool and too_hot:
-            need_run = True
-        elif self._allow_heat and too_cold:
-            need_run = True
-
-        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_run: %s (cur: %s, target: %s)",
+        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s (cur: %s, target: %s)",
                       self._thermostat_entity_id,
                       self.name,
                       too_hot,
                       too_cold,
-                      need_run,
+                      need_turn_on,
                       cur_temp,
                       target_temp
                       )
 
         if self._is_on():
-            if not need_run:
+            if not need_turn_on:
                 _LOGGER.info("%s: Turning off %s %s",
                              self._thermostat_entity_id,
                              self.name, self._target_entity_id)
@@ -457,7 +436,7 @@ class SwitchController(AbstractController):
                              self.name, self._target_entity_id)
                 await self._async_turn_on()
         else:
-            if need_run:
+            if need_turn_on:
                 _LOGGER.info("%s: Turning on %s %s",
                              self._thermostat_entity_id,
                              self.name, self._target_entity_id)

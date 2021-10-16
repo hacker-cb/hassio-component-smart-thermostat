@@ -451,9 +451,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         """
         if self._hvac_mode == HVAC_MODE_OFF:
             return CURRENT_HVAC_OFF
-        if self._cooler and self._cooler.cooling:
+        if self._cooler and self._cooler.is_working():
             return CURRENT_HVAC_COOL
-        if self._heater and self._heater.heating:
+        if self._heater and self._heater.is_working():
             return CURRENT_HVAC_HEAT
         return CURRENT_HVAC_IDLE
 

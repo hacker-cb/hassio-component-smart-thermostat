@@ -354,7 +354,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._async_update_temp(sensor_state)
                 self.async_write_ha_state()
 
-            _LOGGER.info("%s: Started, supported HVAC modes: %s", self.name, self._hvac_list)
+            _LOGGER.info("%s: Ready, supported HVAC modes: %s", self.name, self._hvac_list)
 
             for contr in self._controllers:
                 contr.async_startup()

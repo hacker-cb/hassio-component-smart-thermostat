@@ -2,6 +2,8 @@ import abc
 import logging
 from typing import Optional, final, Mapping, Any
 
+from simple_pid import PID
+
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
@@ -149,6 +151,11 @@ class PidParams(abc.ABC):
         self.ki = ki
         self.kd = kd
 
+    def invert(self):
+        self.kp = -self.kp
+        self.ki = -self.ki
+        self.kd = -self.kd
+
 
 class AbstractPidController(AbstractController, abc.ABC):
     def __init__(
@@ -162,6 +169,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         super().__init__(name, mode, target_entity_id, inverted)
         self._initial_pid_params = pid_params
         self._current_pid_params = Optional[PidParams]
+        self._pid = Optional[PID]
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
@@ -192,6 +200,37 @@ class AbstractPidController(AbstractController, abc.ABC):
         return {
             ATTR_PID_PARAMS: f"{p.kp},{p.ki},{p.kd}" if p else None
         }
+
+    def set_pid_params(self, pid_params: PidParams):
+        """Set new PID params."""
+        if not pid_params:
+            raise ValueError(f"PID params can't be None")
+        if self._mode == HVAC_MODE_COOL and not pid_params.kp < 0:
+            pid_params.invert()
+            _LOGGER.warning("%s: %s - Cooler mode but kp not negative. Inverting all PID params: %s",
+                            self._thermostat.get_entity_id,
+                            self.name,
+                            pid_params
+                            )
+        if self._inverted:
+            pid_params.invert()
+            _LOGGER.info("%s: %s - Target behavior inverted requested in config. Inverting all PID params: %s",
+                         self._thermostat.get_entity_id,
+                         self.name,
+                         pid_params
+                         )
+        self._current_pid_params = pid_params
+
+        if self._active:
+            self._active = False
+            self._pid = None
+
+        _LOGGER.info("%s: %s - New PID params: %s",
+                     self._thermostat.get_entity_id,
+                     self.name,
+                     self._current_pid_params
+                     )
+
 
 
 class SwitchController(AbstractController):

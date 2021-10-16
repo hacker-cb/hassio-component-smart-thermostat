@@ -112,6 +112,9 @@ class AbstractController(abc.ABC):
         _ = event
         self._hass.create_task(self.async_control())
 
+        # notify to handle correct current HVAC mode
+        self.__thermostat.async_write_ha_state()
+
     @property
     def running(self):
         return self.__running
@@ -148,8 +151,7 @@ class AbstractController(abc.ABC):
     @final
     async def async_stop(self):
         _LOGGER.debug(
-            "%s: %s - Stopping controller"
-            "Activated",
+            "%s: %s - Stopping controller",
             self._thermostat_entity_id,
             self.name
         )

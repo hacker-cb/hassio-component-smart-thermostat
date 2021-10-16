@@ -541,6 +541,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     async def _async_control(self, time=None, force=False):
         """Call controllers"""
         async with self._temp_lock:
+            _LOGGER.debug("%s: async control", self.entity_id)
 
             cur_temp = self._cur_temp
             target_temp = self._target_temp
@@ -556,15 +557,19 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 need_heat = True
 
             if not need_cool and self._cooler.running:
+                _LOGGER.debug("%s: Stopping %s", self.entity_id, self._cooler.name)
                 await self._cooler.async_stop()
 
             if not need_heat and self._heater.running:
+                _LOGGER.debug("%s: Stopping %s", self.entity_id, self._heater.name)
                 await self._heater.async_stop()
 
             if need_cool and not self._cooler.running:
+                _LOGGER.debug("%s: Starting %s", self.entity_id, self._cooler.name)
                 await self._cooler.async_start()
 
             if need_heat and not self._heater.running:
+                _LOGGER.debug("%s: Starting %s", self.entity_id, self._heater.name)
                 await self._heater.async_start()
 
             for controller in self._controllers:

@@ -67,7 +67,7 @@ class AbstractController(abc.ABC):
         self._mode = mode
         self._target_entity_id = target_entity_id
         self._inverted = inverted
-        self._active = False
+        self._running = False
         self._hass = Optional[HomeAssistant]
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
@@ -118,8 +118,13 @@ class AbstractController(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def running(self):
-        """Is target running now?"""
+    def heating(self):
+        """Is target heating now?"""
+
+    @property
+    @abc.abstractmethod
+    def cooling(self):
+        """Is target cooling now?"""
 
     @abc.abstractmethod
     async def _async_stop(self):
@@ -141,25 +146,20 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        if self._hvac_mode == HVAC_MODE_OFF and self._active:
+        if self._hvac_mode == HVAC_MODE_OFF and self._running:
             _LOGGER.info("%s: %s - HVAC mode is off, deactivate",
                          self._thermostat_entity_id,
                          self.name,
                          )
-            self._active = False
-            if self.running:
-                _LOGGER.info("%s: %s - stopping",
-                             self._thermostat_entity_id,
-                             self.name,
-                             )
-                await self._async_stop()
+            self._running = False
+            await self._async_stop()
 
-        if self._hvac_mode != HVAC_MODE_OFF and not self._active and None not in (
+        if self._hvac_mode != HVAC_MODE_OFF and not self._running and None not in (
                 cur_temp,
                 target_temp,
         ):
             if self._async_start(cur_temp, target_temp):
-                self._active = True
+                self._running = True
                 _LOGGER.info(
                     "%s: %s - Obtained current (%s) and target  (%s) temperature. "
                     "Activated",
@@ -179,7 +179,7 @@ class AbstractController(abc.ABC):
                 )
                 return
 
-        if not self._active or self._hvac_mode == HVAC_MODE_OFF:
+        if not self._running or self._hvac_mode == HVAC_MODE_OFF:
             return
 
         await self._async_control(cur_temp, target_temp, time=time, force=force)
@@ -218,6 +218,14 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._initial_pid_params = pid_params
         self._current_pid_params = Optional[PidParams]
         self._pid = Optional[PID]
+
+    @AbstractController.heating.getter
+    def heating(self):
+        raise NotImplementedError()  # FIXME: Not implemented
+
+    @AbstractController.cooling.getter
+    def cooling(self):
+        raise NotImplementedError()  # FIXME: Not implemented
 
     @final
     async def async_added_to_hass(self, hass: HomeAssistant):
@@ -272,9 +280,9 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         self._current_pid_params = pid_params
 
-        if self._active:
+        if self._running:
             # Reset all current PID data
-            self._active = False
+            self._running = False
             self._pid = None
 
         _LOGGER.info("%s: %s - New PID params: %s",
@@ -286,7 +294,7 @@ class AbstractPidController(AbstractController, abc.ABC):
     @final
     async def _async_start(self, cur_temp, target_temp) -> bool:
         if not self._current_pid_params:
-            _LOGGER.error("%s: %s - Init called but no PID params was set", self._thermostat_entity_id, self.name)
+            _LOGGER.error("%s: %s - Start called but no PID params was set", self._thermostat_entity_id, self.name)
             return False
 
         pid_params = self._current_pid_params
@@ -359,10 +367,13 @@ class SwitchController(AbstractController):
         self._hot_tolerance = hot_tolerance
         self._min_cycle_duration = min_cycle_duration
 
-    @AbstractController.running.getter
-    def running(self):
-        """If the toggleable device is currently active."""
-        return self._hass.states.is_state(self._target_entity_id, STATE_ON)
+    @AbstractController.heating.getter
+    def heating(self):
+        return self._mode == HVAC_MODE_HEAT and self._hass.states.is_state(self._target_entity_id, STATE_ON)
+
+    @AbstractController.cooling.getter
+    def cooling(self):
+        return self._mode == HVAC_MODE_COOL and self._hass.states.is_state(self._target_entity_id, STATE_ON)
 
     async def _async_turn_on(self):
         """Turn toggleable device on."""
@@ -380,6 +391,9 @@ class SwitchController(AbstractController):
             HA_DOMAIN, service, data, context=self._context
         )
 
+    def _is_on(self):
+        self._hass.states.is_state(self._target_entity_id, STATE_ON)
+
     async def _async_stop(self):
         await self._async_turn_off()
 
@@ -393,7 +407,7 @@ class SwitchController(AbstractController):
         # If the `time` argument is not none, we were invoked for
         # keep-alive purposes, and `min_cycle_duration` is irrelevant.
         if not force and time is None and self._min_cycle_duration:
-            if self.running:
+            if self._is_on():
                 current_state = STATE_ON
             else:
                 current_state = HVAC_MODE_OFF
@@ -430,7 +444,7 @@ class SwitchController(AbstractController):
                       target_temp
                       )
 
-        if self.running:
+        if self._is_on():
             if not need_run:
                 _LOGGER.info("%s: Turning off %s %s",
                              self._thermostat_entity_id,
@@ -468,7 +482,3 @@ class ClimatePidController(AbstractPidController):
             inverted: bool
     ):
         super().__init__(name, mode, target_entity_id, pid_params, inverted)
-
-    @AbstractController.running.getter
-    def running(self):
-        raise NotImplementedError()  # FIXME: Not implemented

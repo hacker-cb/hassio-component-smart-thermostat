@@ -379,8 +379,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def get_hass(self) -> HomeAssistant:
         return self.hass
 
-    def get_entity_name(self) -> str:
-        return self.name
+    def get_entity_id(self) -> str:
+        return self.entity_id
 
     def get_hvac_mode(self) -> str:
         return self.hvac_mode

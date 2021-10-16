@@ -18,7 +18,7 @@ class Thermostat(abc.ABC):
         """Get HomeAssistant instance"""
 
     @abc.abstractmethod
-    def get_entity_name(self) -> str:
+    def get_entity_id(self) -> str:
         """Get Entity name instance"""
 
     @abc.abstractmethod
@@ -202,7 +202,7 @@ class SwitchController(AbstractController):
             _LOGGER.info(
                 "%s: %s - obtained current (%s) and target  (%s) temperature. "
                 "Smart thermostat running.",
-                self._thermostat.get_entity_name(),
+                self._thermostat.get_entity_id(),
                 self.name,
                 cur_temp,
                 target_temp,
@@ -210,7 +210,7 @@ class SwitchController(AbstractController):
 
         if self._hvac_mode == HVAC_MODE_OFF and self.running:
             _LOGGER.info("%s: %s - HVAC mode is off, but running, turning off",
-                         self._thermostat.get_entity_name(),
+                         self._thermostat.get_entity_id(),
                          self.name,
                          )
             await self._async_turn_off()
@@ -251,7 +251,7 @@ class SwitchController(AbstractController):
             need_run = True
 
         _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_run: %s (cur: %s, target: %s)",
-                      self._thermostat.get_entity_name(),
+                      self._thermostat.get_entity_id(),
                       self.name,
                       too_hot,
                       too_cold,
@@ -263,26 +263,26 @@ class SwitchController(AbstractController):
         if self.running:
             if not need_run:
                 _LOGGER.info("%s: Turning off %s %s",
-                             self._thermostat.get_entity_name(),
+                             self._thermostat.get_entity_id(),
                              self.name, self._target_entity_id)
                 await self._async_turn_off()
             elif time is not None:
                 # The time argument is passed only in keep-alive case
                 _LOGGER.info("%s: Keep-alive - Turning on %s %s",
-                             self._thermostat.get_entity_name(),
+                             self._thermostat.get_entity_id(),
                              self.name, self._target_entity_id)
                 await self._async_turn_on()
         else:
             if need_run:
                 _LOGGER.info("%s: Turning on %s %s",
-                             self._thermostat.get_entity_name(),
+                             self._thermostat.get_entity_id(),
                              self.name, self._target_entity_id)
                 await self._async_turn_on()
             elif time is not None:
                 # The time argument is passed only in keep-alive case
                 _LOGGER.info(
                     "%s: Keep-alive - Turning off %s %s",
-                    self._thermostat.get_entity_name(),
+                    self._thermostat.get_entity_id(),
                     self.name, self._target_entity_id
                 )
                 await self._async_turn_off()

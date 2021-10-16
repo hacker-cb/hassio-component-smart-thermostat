@@ -573,19 +573,19 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             elif cur_temp < target_temp and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
                 need_heat = True
 
-            if not need_cool and self._cooler.running:
+            if not need_cool and self._cooler and self._cooler.running:
                 _LOGGER.debug("%s: Stopping %s", self.entity_id, self._cooler.name)
                 await self._cooler.async_stop()
 
-            if not need_heat and self._heater.running:
+            if not need_heat and self._heater and self._heater.running:
                 _LOGGER.debug("%s: Stopping %s", self.entity_id, self._heater.name)
                 await self._heater.async_stop()
 
-            if need_cool and not self._cooler.running:
+            if need_cool and (not self._cooler or not self._cooler.running):
                 _LOGGER.debug("%s: Starting %s", self.entity_id, self._cooler.name)
                 await self._cooler.async_start()
 
-            if need_heat and not self._heater.running:
+            if need_heat and (not self._heater or not self._heater.running):
                 _LOGGER.debug("%s: Starting %s", self.entity_id, self._heater.name)
                 await self._heater.async_start()
 

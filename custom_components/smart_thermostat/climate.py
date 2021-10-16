@@ -317,7 +317,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         )
 
         for controller in self._controllers:
-            await controller.async_added_to_hass()
+            await controller.async_added_to_hass(self.hass)
 
         if self._keep_alive:
             self.async_on_remove(
@@ -471,7 +471,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         attrs = {}
         for controller in self._controllers:
-            attrs = {**attrs, ** controller.extra_state_attributes}
+            extra_controller_attrs = controller.extra_state_attributes
+            if extra_controller_attrs:
+                attrs = {**attrs, **extra_controller_attrs}
         return attrs
 
     async def async_set_hvac_mode(self, hvac_mode):

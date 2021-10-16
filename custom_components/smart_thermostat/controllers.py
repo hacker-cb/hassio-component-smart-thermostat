@@ -18,10 +18,6 @@ _LOGGER = logging.getLogger(__name__)
 
 class Thermostat(abc.ABC):
     @abc.abstractmethod
-    def get_hass(self) -> HomeAssistant:
-        """Get HomeAssistant instance"""
-
-    @abc.abstractmethod
     def get_entity_id(self) -> str:
         """Get Entity name instance"""
 
@@ -72,16 +68,12 @@ class AbstractController(abc.ABC):
         self._target_entity_id = target_entity_id
         self._inverted = inverted
         self._active = False
+        self._hass = Optional[HomeAssistant]
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
 
     def set_thermostat(self, thermostat: Thermostat):
         self._thermostat = thermostat
-
-    @property
-    @final
-    def _hass(self) -> HomeAssistant:
-        return self._thermostat.get_hass()
 
     @property
     @final
@@ -102,14 +94,15 @@ class AbstractController(abc.ABC):
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         return None
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self, hass: HomeAssistant):
         """Will be called in Entity async_added_to_hass()"""
+        self._hass = hass
+
         self._thermostat.async_on_remove(
             async_track_state_change_event(
                 self._hass, [self._target_entity_id], self._on_target_entity_state_changed
             )
         )
-        self._thermostat.async_write_ha_state()
 
     def async_startup(self):
         """
@@ -233,8 +226,8 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid = Optional[PID]
 
     @final
-    async def async_added_to_hass(self):
-        await super().async_added_to_hass()
+    async def async_added_to_hass(self, hass: HomeAssistant):
+        await super().async_added_to_hass(hass)
 
         old_state = await self._thermostat.async_get_last_state()
 

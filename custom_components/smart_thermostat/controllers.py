@@ -212,31 +212,38 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._initial_pid_params = pid_params
         self._current_pid_params = Optional[PidParams]
         self._pid = Optional[PID]
+        self._auto_tune = False
 
     @final
     async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
         await super().async_added_to_hass(hass, old_state)
 
-        if old_state is not None and old_state.attributes.get(ATTR_PID_PARAMS) is not None:
-            saved_pid_params = old_state.attributes.get(ATTR_PID_PARAMS)
-            if saved_pid_params:
-                kp, ki, kd = saved_pid_params.split(',')
-                self._current_pid_params = PidParams(kp, ki, kd)
-                _LOGGER.info("%s: %s - restored last PID params: %s",
+        if self._auto_tune:
+            if old_state is not None and old_state.attributes.get(ATTR_PID_PARAMS) is not None:
+                saved_pid_params = old_state.attributes.get(ATTR_PID_PARAMS)
+                if saved_pid_params:
+                    kp, ki, kd = saved_pid_params.split(',')
+                    self._current_pid_params = PidParams(kp, ki, kd)
+                    _LOGGER.info("%s: %s - restored last tuned PID params: %s",
+                                 self._thermostat_entity_id,
+                                 self.name,
+                                 self._current_pid_params
+                                 )
+            raise NotImplementedError(f"Auto-tuning PID params unsupported now")
+        else:
+            if self._initial_pid_params:
+                _LOGGER.info("%s: %s - using initial PID params: %s",
                              self._thermostat_entity_id,
                              self.name,
-                             self._current_pid_params
+                             self._initial_pid_params
                              )
-        if not self._current_pid_params:
-            self._current_pid_params = self._initial_pid_params
-            _LOGGER.info("%s: %s - No PID params found in state attributes, using default: %s",
-                         self._thermostat_entity_id,
-                         self.name,
-                         self._current_pid_params if self._current_pid_params else None
-                         )
+                self.set_pid_params(self._initial_pid_params)
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
+        if not self._auto_tune:
+            return None
+
         p = self._current_pid_params
         return {
             ATTR_PID_PARAMS: f"{p.kp},{p.ki},{p.kd}" if p else None

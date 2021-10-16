@@ -92,13 +92,15 @@ TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
 })
 
 TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
-    vol.Optional(CONF_PID_PARAMS): {
-        vol.Required(CONF_PID_PARAMS_KP): vol.Coerce(float),
-        vol.Required(CONF_PID_PARAMS_KI): vol.Coerce(float),
-        vol.Required(CONF_PID_PARAMS_KD): vol.Coerce(float)
-    }
+    vol.Required(CONF_PID_PARAMS): vol.Any(
+        vol.Coerce(str),
+        {
+            vol.Required(CONF_PID_PARAMS_KP): vol.Coerce(float),
+            vol.Required(CONF_PID_PARAMS_KI): vol.Coerce(float),
+            vol.Required(CONF_PID_PARAMS_KD): vol.Coerce(float)
+        }
+    )
 })
-
 
 KEY_SCHEMA = vol.Schema({
     vol.Required(
@@ -146,6 +148,18 @@ def _extract_target(target, schema):
         return target
 
 
+def _extract_pid_params(raw_conf) -> PidParams:
+    if isinstance(raw_conf, dict):
+        return PidParams(
+            raw_conf[CONF_PID_PARAMS_KP],
+            raw_conf[CONF_PID_PARAMS_KI],
+            raw_conf[CONF_PID_PARAMS_KD]
+        )
+    if isinstance(raw_conf, str):
+        kp, ki, kd = raw_conf.split(",")
+        return PidParams(kp, ki, kd)
+
+
 def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
     # First use common schema
     conf = _extract_target(raw_conf, TARGET_SCHEMA_COMMON)
@@ -179,11 +193,7 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             name,
             mode,
             entity_id,
-            PidParams(
-                conf[CONF_PID_PARAMS_KP],
-                conf[CONF_PID_PARAMS_KI],
-                conf[CONF_PID_PARAMS_KD]
-            ) if conf[CONF_PID_PARAMS] else None,
+            _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
             inverted
         )
         return controller
@@ -195,11 +205,7 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             name,
             mode,
             entity_id,
-            PidParams(
-                conf[CONF_PID_PARAMS_KP],
-                conf[CONF_PID_PARAMS_KI],
-                conf[CONF_PID_PARAMS_KD]
-            ) if conf[CONF_PID_PARAMS] else None,
+            _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
             inverted
         )
         return controller

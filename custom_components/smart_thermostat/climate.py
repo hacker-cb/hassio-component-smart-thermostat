@@ -151,13 +151,13 @@ def _extract_target(target, schema):
 def _extract_pid_params(raw_conf) -> PidParams:
     if isinstance(raw_conf, dict):
         return PidParams(
-            raw_conf[CONF_PID_PARAMS_KP],
-            raw_conf[CONF_PID_PARAMS_KI],
-            raw_conf[CONF_PID_PARAMS_KD]
+            float(raw_conf[CONF_PID_PARAMS_KP]),
+            float(raw_conf[CONF_PID_PARAMS_KI]),
+            float(raw_conf[CONF_PID_PARAMS_KD])
         )
     if isinstance(raw_conf, str):
         kp, ki, kd = raw_conf.split(",")
-        return PidParams(kp, ki, kd)
+        return PidParams(float(kp), float(ki), float(kd))
 
 
 def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:

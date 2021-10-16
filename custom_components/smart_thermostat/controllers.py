@@ -352,7 +352,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                           output,
                           current_output
                           )
-            self._apply_output(output)
+            await self._apply_output(output)
 
     @abc.abstractmethod
     async def _async_turn_on(self):
@@ -367,7 +367,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Get output limits (min,max)"""
 
     @abc.abstractmethod
-    def _apply_output(self, output: float):
+    async def _apply_output(self, output: float):
         """Apply output to target"""
 
 
@@ -525,7 +525,7 @@ class NumberPidController(AbstractPidController):
 
         return min_temp, max_temp
 
-    def _apply_output(self, output: float):
+    async def _apply_output(self, output: float):
         domain, _ = self._target_entity_id.split('.')
         await self._hass.services.async_call(
             domain, SERVICE_SET_VALUE, {
@@ -574,7 +574,7 @@ class ClimatePidController(AbstractPidController):
 
         return min_temp, max_temp
 
-    def _apply_output(self, output: float):
+    async def _apply_output(self, output: float):
         await self._hass.services.async_call(
             CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE, {
                 ATTR_ENTITY_ID: self._target_entity_id,

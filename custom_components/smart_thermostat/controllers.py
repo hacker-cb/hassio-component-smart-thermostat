@@ -321,7 +321,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             output_limits=output_limits
         )
 
-        current_output = self._hass.states.get(self._target_entity_id)
+        current_output = self._get_current_output()
         if current_output:
             self._pid.set_auto_mode(enabled=True, last_output=current_output)
 
@@ -358,17 +358,22 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         output = float(self._pid(cur_temp))
 
-        current_output = self._hass.states.get(self._target_entity_id)
-        if current_output != output:
+        temperature = self._get_current_output()
+
+        if temperature != output:
             _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
                           self._thermostat_entity_id,
                           self.name,
                           cur_temp,
                           target_temp,
-                          output,
-                          current_output
+                          temperature,
+                          output
                           )
             await self._apply_output(output)
+
+    @abc.abstractmethod
+    def _get_current_output(self):
+        """Get current output"""
 
     @abc.abstractmethod
     async def _async_turn_on(self):
@@ -524,6 +529,11 @@ class NumberPidController(AbstractPidController):
     def is_working(self):
         return True
 
+    def _get_current_output(self):
+        state = self._hass.states.get(self._target_entity_id)
+        if state:
+            return float(state)
+
     async def _async_turn_on(self):
         pass
 
@@ -568,6 +578,12 @@ class ClimatePidController(AbstractPidController):
             return False
         hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
         return hvac_action != CURRENT_HVAC_IDLE
+
+    def _get_current_output(self):
+        state = self._hass.states.get(self._target_entity_id)
+        if state:
+            return float(state.attributes.get(ATTR_TEMPERATURE))
+        return None
 
     async def _async_turn_on(self):
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_ON, {

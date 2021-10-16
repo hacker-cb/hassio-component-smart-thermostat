@@ -208,9 +208,7 @@ class PidParams(abc.ABC):
         self.kd = -self.kd
 
     def __repr__(self):
-        return (
-            'Kp={self.Kp!r}, Ki={self.Ki!r}, Kd={self.Kd!r}'
-        ).format(self=self)
+        return f"Kp={self.kp}, Ki={self.ki}, Kd={self.kd}"
 
 
 class AbstractPidController(AbstractController, abc.ABC):

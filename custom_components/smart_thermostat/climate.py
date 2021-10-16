@@ -317,7 +317,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         )
 
         for controller in self._controllers:
-            await controller.async_added_to_hass(self.hass)
+            await controller.async_added_to_hass(self.hass, await self.async_get_last_state())
 
         if self._keep_alive:
             self.async_on_remove(
@@ -541,8 +541,35 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     async def _async_control(self, time=None, force=False):
         """Call controllers"""
         async with self._temp_lock:
+
+            cur_temp = self._cur_temp
+            target_temp = self._target_temp
+
+            need_heat = False
+            need_cool = False
+
+            if cur_temp == target_temp:
+                pass
+            elif cur_temp > target_temp and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
+                need_cool = True
+            elif cur_temp < target_temp and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
+                need_heat = True
+
+            if not need_cool and self._cooler.running:
+                await self._cooler.async_stop()
+
+            if not need_heat and self._heater.running:
+                await self._heater.async_stop()
+
+            if need_cool and not self._cooler.running:
+                await self._cooler.async_start()
+
+            if need_heat and not self._heater.running:
+                await self._heater.async_start()
+
             for controller in self._controllers:
-                await controller.async_control(time=time, force=force)
+                if controller.running:
+                    await controller.async_control(time=time, force=force)
 
     @property
     def supported_features(self):

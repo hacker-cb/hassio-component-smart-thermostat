@@ -69,7 +69,7 @@ class AbstractController(abc.ABC):
         self._target_entity_id = target_entity_id
         self._inverted = inverted
         self.__running = False
-        self._hass = Optional[HomeAssistant]
+        self._hass: Optional[HomeAssistant] = None
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
 
@@ -133,6 +133,15 @@ class AbstractController(abc.ABC):
         cur_temp = self.__thermostat.get_current_temperature()
         target_temp = self.__thermostat.get_target_temperature()
 
+        _LOGGER.debug(
+            "%s: %s - Trying to start controller, cur: %, target: %s "
+            "Activated",
+            self._thermostat_entity_id,
+            self.name,
+            cur_temp,
+            target_temp,
+        )
+
         if await self._async_start(cur_temp, target_temp):
             _LOGGER.debug(
                 "%s: %s - Started controller, cur: %, target: %s "
@@ -188,7 +197,7 @@ class AbstractController(abc.ABC):
 
 
 class PidParams(abc.ABC):
-    def __init__(self, kp, ki, kd):
+    def __init__(self, kp: float, ki: float, kd: float):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -197,6 +206,11 @@ class PidParams(abc.ABC):
         self.kp = -self.kp
         self.ki = -self.ki
         self.kd = -self.kd
+
+    def __repr__(self):
+        return (
+            'Kp={self.Kp!r}, Ki={self.Ki!r}, Kd={self.Kd!r}'
+        ).format(self=self)
 
 
 class AbstractPidController(AbstractController, abc.ABC):
@@ -210,8 +224,8 @@ class AbstractPidController(AbstractController, abc.ABC):
     ):
         super().__init__(name, mode, target_entity_id, inverted)
         self._initial_pid_params = pid_params
-        self._current_pid_params = Optional[PidParams]
-        self._pid = Optional[PID]
+        self._current_pid_params: Optional[PidParams] = None
+        self._pid: Optional[PID] = None
         self._auto_tune = False
 
     @final
@@ -331,6 +345,10 @@ class AbstractPidController(AbstractController, abc.ABC):
         pass
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+        if not self._pid:
+            _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
+            return False
+
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
                          self._thermostat_entity_id,

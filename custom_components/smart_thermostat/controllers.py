@@ -127,12 +127,6 @@ class AbstractController(abc.ABC):
 
     @property
     @final
-    def _target_entity_state(self):
-        """Get target state"""
-        return self._hass.states.get(self._target_entity_id)
-
-    @property
-    @final
     def _allow_cool(self):
         return self._mode == HVAC_MODE_COOL and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
 
@@ -302,7 +296,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             output_limits=self._get_output_limits()
         )
 
-        current_output = float(self._target_entity_state)
+        current_output = self._hass.states.get(self._target_entity_id)
         if current_output:
             self._pid.set_auto_mode(enabled=True, last_output=current_output)
 
@@ -327,7 +321,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         output = float(self._pid(cur_temp))
 
-        current_output = float(self._target_entity_state)
+        current_output = self._hass.states.get(self._target_entity_id)
         if current_output != output:
             _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
                           self._thermostat_entity_id,

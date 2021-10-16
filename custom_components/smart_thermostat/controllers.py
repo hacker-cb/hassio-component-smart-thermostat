@@ -128,6 +128,10 @@ class AbstractController(abc.ABC):
     def running(self):
         """Is target running now?"""
 
+    @abc.abstractmethod
+    async def _async_stop(self):
+        """Stop target"""
+
     @property
     @final
     def _target_entity_state(self):
@@ -150,22 +154,28 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        if self._hvac_mode == HVAC_MODE_OFF and self.running:
-            _LOGGER.info("%s: %s - HVAC mode is off, but running, turning off",
+        if self._hvac_mode == HVAC_MODE_OFF and self._active:
+            _LOGGER.info("%s: %s - HVAC mode is off, deactivate",
                          self._thermostat_entity_id,
                          self.name,
                          )
-            await self._async_turn_off()
+            self._active = False
+            if self.running:
+                _LOGGER.info("%s: %s - stopping",
+                             self._thermostat_entity_id,
+                             self.name,
+                             )
+                await self._async_stop()
 
-        if not self._active and None not in (
+        if self._hvac_mode != HVAC_MODE_OFF and not self._active and None not in (
                 cur_temp,
                 target_temp,
         ):
-            if self._async_init(cur_temp, target_temp):
+            if self._async_start(cur_temp, target_temp):
                 self._active = True
                 _LOGGER.info(
-                    "%s: %s - obtained current (%s) and target  (%s) temperature. "
-                    "Successful init",
+                    "%s: %s - Obtained current (%s) and target  (%s) temperature. "
+                    "Activated",
                     self._thermostat_entity_id,
                     self.name,
                     cur_temp,
@@ -173,7 +183,7 @@ class AbstractController(abc.ABC):
                 )
             else:
                 _LOGGER.error(
-                    "%s: %s - obtained current (%s) and target  (%s) temperature. "
+                    "%s: %s - Obtained current (%s) and target  (%s) temperature. "
                     "Init error",
                     self._thermostat_entity_id,
                     self.name,
@@ -188,20 +198,12 @@ class AbstractController(abc.ABC):
         await self._async_control(cur_temp, target_temp, time=time, force=force)
 
     @abc.abstractmethod
-    async def _async_init(self, cur_temp, target_temp) -> bool:
+    async def _async_start(self, cur_temp, target_temp) -> bool:
         """Init all needed things in implementation"""
 
     @abc.abstractmethod
     async def _async_control(self, cur_temp, target_temp, time=None, force=False):
         """Control method. Should be overwritten in child classes"""
-
-    @abc.abstractmethod
-    async def _async_turn_on(self):
-        """Turn on target entity"""
-
-    @abc.abstractmethod
-    async def _async_turn_off(self):
-        """Turn off target entity"""
 
 
 class PidParams(abc.ABC):
@@ -295,7 +297,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                      )
 
     @final
-    async def _async_init(self, cur_temp, target_temp) -> bool:
+    async def _async_start(self, cur_temp, target_temp) -> bool:
         if not self._current_pid_params:
             _LOGGER.error("%s: %s - Init called but no PID params was set", self._thermostat_entity_id, self.name)
             return False
@@ -394,7 +396,10 @@ class SwitchController(AbstractController):
             HA_DOMAIN, service, data, context=self._context
         )
 
-    async def _async_init(self, cur_temp, target_temp) -> bool:
+    async def _async_stop(self):
+        await self._async_turn_off()
+
+    async def _async_start(self, cur_temp, target_temp) -> bool:
         # Nothing to init here
         return True
 

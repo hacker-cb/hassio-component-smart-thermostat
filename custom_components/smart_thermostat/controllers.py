@@ -5,7 +5,7 @@ from typing import Optional, final, Mapping, Any
 from simple_pid import PID
 
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL
-from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF
+from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, STATE_OFF
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
@@ -371,21 +371,22 @@ class SwitchController(AbstractController):
     async def _async_turn_on(self):
         """Turn toggleable device on."""
         service = SERVICE_TURN_ON if not self._inverted else SERVICE_TURN_OFF
-        data = {ATTR_ENTITY_ID: self._target_entity_id}
-        await self._hass.services.async_call(
-            HA_DOMAIN, service, data, context=self._context
-        )
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
 
     async def _async_turn_off(self):
         """Turn toggleable device off."""
         service = SERVICE_TURN_OFF if not self._inverted else SERVICE_TURN_ON
-        data = {ATTR_ENTITY_ID: self._target_entity_id}
-        await self._hass.services.async_call(
-            HA_DOMAIN, service, data, context=self._context
-        )
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
 
     def _is_on(self):
-        return self._hass.states.is_state(self._target_entity_id, STATE_ON)
+        return self._hass.states.is_state(
+            self._target_entity_id,
+            STATE_ON if not self._inverted else STATE_OFF
+        )
 
     async def _async_start(self, cur_temp, target_temp) -> bool:
         return True

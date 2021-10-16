@@ -413,12 +413,13 @@ class SwitchController(AbstractController):
         ):
             need_turn_on = True
 
-        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s (cur: %s, target: %s)",
+        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, (cur: %s, target: %s)",
                       self._thermostat_entity_id,
                       self.name,
                       too_hot,
                       too_cold,
                       need_turn_on,
+                      self._is_on(),
                       cur_temp,
                       target_temp
                       )

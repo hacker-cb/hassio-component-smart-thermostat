@@ -82,13 +82,13 @@ SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]
 
 TARGET_SCHEMA_COMMON = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-    vol.Optional(CONF_INVERTED, default=False): bool,
-    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float,
-    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
+    vol.Optional(CONF_INVERTED, default=False): bool
 })
 
 TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
-    vol.Optional(CONF_MIN_DUR): cv.positive_time_period
+    vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
+    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float,
+    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
 })
 
 TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
@@ -152,14 +152,14 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
 
     entity_id = conf[CONF_ENTITY_ID]
     inverted = conf[CONF_INVERTED]
-    cold_tolerance = conf[CONF_COLD_TOLERANCE]
-    hot_tolerance = conf[CONF_HOT_TOLERANCE]
 
     domain, _ = entity_id.split('.')
 
     if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
         conf = _extract_target(raw_conf, TARGET_SCHEMA_SWITCH)
         min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
+        cold_tolerance = conf[CONF_COLD_TOLERANCE]
+        hot_tolerance = conf[CONF_HOT_TOLERANCE]
 
         controller = SwitchController(
             name,

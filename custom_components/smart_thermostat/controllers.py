@@ -78,11 +78,9 @@ class AbstractController(abc.ABC):
     def mode(self) -> str:
         return self._mode
 
+    @property
     def _context(self) -> Context:
-        ctx = self._thermostat.get_context()
-        if not ctx:
-            _LOGGER.error("No context available")
-        return ctx
+        return self._thermostat.get_context()
 
     @property
     @final

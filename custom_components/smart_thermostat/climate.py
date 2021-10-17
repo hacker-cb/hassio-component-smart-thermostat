@@ -358,7 +358,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             self.async_on_remove(
                 async_track_state_change_event(
-                    self.hass, [controller.target_entity_id], self._async_controller_target_entity_changed
+                    self.hass, controller.get_used_entity_ids(), self._async_controller_target_entity_changed
                 )
             )
 

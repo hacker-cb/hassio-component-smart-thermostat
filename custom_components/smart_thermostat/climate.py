@@ -79,8 +79,29 @@ CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
 CONF_PID_PARAMS = "pid_params"
 CONF_PID_SAMPLE_PERIOD = "sample_period"
+CONF_PID_MIN = "min"
+CONF_PID_MAX = "max"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
+
+
+def _cv_pid_params_list(value: Any) -> list:
+    value = cv.ensure_list_csv(value)
+    if len(value) != 3:
+        raise vol.Invalid(f"{CONF_PID_PARAMS} should be 3 items: kp, ki, kd")
+    value = [float(v) for v in value]
+    return value
+
+
+def _cv_min_max_check(cfg):
+    minimum = cfg.get(CONF_PID_MIN)
+    maximum = cfg.get(CONF_PID_MAX)
+    if None not in (minimum, maximum) and minimum >= maximum:
+        raise vol.Invalid(
+            f"Maximum ({minimum}) is not greater than minimum ({maximum})"
+        )
+    return cfg
+
 
 TARGET_SCHEMA_COMMON = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
@@ -93,21 +114,17 @@ TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
 })
 
-
-def _pid_params_list(value: Any) -> list:
-    value = cv.ensure_list_csv(value)
-    if len(value) != 3:
-        raise vol.Invalid(f"{CONF_PID_PARAMS} should be 3 items: kp, ki, kd")
-    value = [float(v) for v in value]
-    return value
-
-
-TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
-    vol.Optional(CONF_PID_PARAMS,
-                 default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
-                 ): _pid_params_list,
-    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
-})
+TARGET_SCHEMA_PID_REGULATOR = vol.All(
+    TARGET_SCHEMA_COMMON.extend({
+        vol.Optional(CONF_PID_PARAMS,
+                     default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
+                     ): _cv_pid_params_list,
+        vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
+        vol.Optional(CONF_PID_MIN, default=None): vol.Any(None, vol.Coerce(float)),
+        vol.Optional(CONF_PID_MAX, default=None): vol.Any(None, vol.Coerce(float))
+    }),
+    _cv_min_max_check
+)
 
 KEY_SCHEMA = vol.Schema({
     vol.Required(
@@ -191,7 +208,9 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             entity_id,
             PidParams(pid_params[0], pid_params[1], pid_params[2]),
             inverted,
-            conf[CONF_PID_SAMPLE_PERIOD]
+            conf[CONF_PID_SAMPLE_PERIOD],
+            conf[CONF_PID_MIN],
+            conf[CONF_PID_MAX]
         )
         return controller
 
@@ -205,7 +224,9 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             entity_id,
             PidParams(pid_params[0], pid_params[1], pid_params[2]),
             inverted,
-            conf[CONF_PID_SAMPLE_PERIOD]
+            conf[CONF_PID_SAMPLE_PERIOD],
+            conf[CONF_PID_MIN],
+            conf[CONF_PID_MAX]
         )
         return controller
 

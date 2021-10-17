@@ -228,11 +228,15 @@ class AbstractPidController(AbstractController, abc.ABC):
             pid_params: PidParams,
             inverted: bool,
             sample_period: timedelta,
+            target_min: Optional[float],
+            target_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id, inverted)
         self._initial_pid_params = pid_params
         self._current_pid_params: Optional[PidParams] = None
         self._sample_period = sample_period
+        self._target_min = target_min
+        self._target_max = target_max
         self._pid: Optional[PID] = None
         self._auto_tune = False
         self._last_output: Optional[float] = None
@@ -319,7 +323,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             _LOGGER.error("%s: %s - Start called but no PID params was set", self._thermostat_entity_id, self.name)
             return False
 
-        output_limits = self._get_output_limits()
+        output_limits = self.__get_output_limits()
         min_temp, max_temp = output_limits
 
         if not min_temp or not max_temp:
@@ -343,11 +347,12 @@ class AbstractPidController(AbstractController, abc.ABC):
         if temperature:
             self._pid.set_auto_mode(enabled=True, last_output=temperature)
 
-        _LOGGER.info("%s: %s - Initialized.  PID params: %s, temperature: %s",
+        _LOGGER.info("%s: %s - Initialized.  PID params: %s, temperature: %s, limits: %s",
                      self._thermostat_entity_id,
                      self.name,
                      pid_params,
-                     temperature
+                     temperature,
+                     output_limits
                      )
 
         await self._async_turn_on()
@@ -399,6 +404,16 @@ class AbstractPidController(AbstractController, abc.ABC):
             await self._apply_output(output)
 
         self._last_output = output
+
+    def __get_output_limits(self) -> (None, None):
+        limits = self._get_output_limits()
+
+        # Override min/max values if provided in config
+        if self._target_min is not None:
+            limits = (self._target_min, limits[1])
+        if self._target_max is not None:
+            limits = (limits[0], self._target_max)
+        return limits
 
     def _round_to_target_precision(self, value: float) -> float:
         # FIXME: use target attr precision
@@ -556,9 +571,14 @@ class NumberPidController(AbstractPidController):
             target_entity_id: str,
             pid_params: PidParams,
             inverted: bool,
-            sample_period: timedelta
+            sample_period: timedelta,
+            target_min: Optional[float],
+            target_max: Optional[float]
     ):
-        super().__init__(name, mode, target_entity_id, pid_params, inverted, sample_period)
+        super().__init__(name, mode, target_entity_id,
+                         pid_params, inverted,
+                         sample_period,
+                         target_min, target_max)
 
     def is_working(self):
         return True
@@ -603,9 +623,14 @@ class ClimatePidController(AbstractPidController):
             target_entity_id: str,
             pid_params: PidParams,
             inverted: bool,
-            sample_period: timedelta
+            sample_period: timedelta,
+            target_min: Optional[float],
+            target_max: Optional[float]
     ):
-        super().__init__(name, mode, target_entity_id, pid_params, inverted, sample_period)
+        super().__init__(name, mode, target_entity_id,
+                         pid_params, inverted,
+                         sample_period,
+                         target_min, target_max)
 
     def is_working(self):
         state: State = self._hass.states.get(self._target_entity_id)

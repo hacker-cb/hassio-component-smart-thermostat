@@ -79,6 +79,11 @@ class AbstractController(abc.ABC):
 
     @property
     @final
+    def target_entity_id(self) -> str:
+        return self._target_entity_id
+
+    @property
+    @final
     def _hvac_mode(self) -> str:
         return self._thermostat.get_hvac_mode()
 

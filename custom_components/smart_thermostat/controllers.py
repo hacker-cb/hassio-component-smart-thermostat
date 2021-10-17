@@ -325,14 +325,8 @@ class AbstractPidController(AbstractController, abc.ABC):
             return False
 
         output_limits = self.__get_output_limits()
-        min_temp, max_temp = output_limits
 
-        if not min_temp or not max_temp:
-            _LOGGER.error(
-                "%s: %s - Invalid output limits: (%s, %s)",
-                self._thermostat_entity_id, self.name,
-                min_temp, max_temp
-            )
+        if not self.__validate_output_limits(output_limits):
             return False
 
         pid_params = self._current_pid_params
@@ -390,6 +384,8 @@ class AbstractPidController(AbstractController, abc.ABC):
                          self._last_output_limits,
                          output_limits
                          )
+            if not self.__validate_output_limits(output_limits):
+                return
             self._pid.output_limits = output_limits
 
         temperature = self.__round_to_target_precision(self._get_current_output())
@@ -418,15 +414,46 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         self._last_output = output
 
+    def __validate_output_limits(self, output_limits: (None, None)) -> bool:
+        min_temp, max_temp = output_limits
+
+        if not min_temp or not max_temp:
+            _LOGGER.error(
+                "%s: %s - Invalid output limits: (%s, %s)",
+                self._thermostat_entity_id, self.name,
+                min_temp, max_temp
+            )
+            return False
+        else:
+            return True
+
     def __get_output_limits(self) -> (None, None):
-        limits = self._get_output_limits()
+        output_limits = self._get_output_limits()
+        min_temp, max_temp = output_limits
 
         # Override min/max values if provided in config
         if self._target_min is not None:
-            limits = (self._target_min, limits[1])
+            if min_temp is not None and self._target_min < min_temp:
+                _LOGGER.warning("%s: %s - config min (%) < target min (%) - not adjusting",
+                                self._thermostat_entity_id,
+                                self.name,
+                                self._target_min,
+                                min_temp
+                                )
+            else:
+                min_temp = self._target_min
         if self._target_max is not None:
-            limits = (limits[0], self._target_max)
-        return limits
+            if max_temp is not None and self._target_max > max_temp:
+                _LOGGER.warning("%s: %s - config max (%) > target max (%) - not adjusting",
+                                self._thermostat_entity_id,
+                                self.name,
+                                self._target_max,
+                                max_temp
+                                )
+            else:
+                max_temp = self._target_max
+
+        return min_temp, max_temp
 
     def __round_to_target_precision(self, value: float) -> float:
         # FIXME: use target attr precision

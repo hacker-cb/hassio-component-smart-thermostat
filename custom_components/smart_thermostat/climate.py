@@ -60,6 +60,9 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_TOLERANCE = 0.3
 DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool modes and PID control support"
 DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
+DEFAULT_PID_KP = 1.0
+DEFAULT_PID_KI = 1.0
+DEFAULT_PID_KD = 1.0
 CONF_HEATER = "heater"
 CONF_COOLER = "cooler"
 CONF_INVERTED = "inverted"
@@ -75,9 +78,6 @@ CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
 CONF_PID_PARAMS = "pid_params"
-CONF_PID_PARAMS_KP = "kp"
-CONF_PID_PARAMS_KI = "ki"
-CONF_PID_PARAMS_KD = "kd"
 CONF_PID_SAMPLE_PERIOD = "sample_period"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
@@ -93,15 +93,19 @@ TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
 })
 
+
+def _pid_params_list(value: Any) -> list:
+    value = cv.ensure_list_csv(value)
+    if len(value) != 3:
+        raise vol.Invalid(f"{CONF_PID_PARAMS} should be 3 items: kp, ki, kd")
+    value = [float(v) for v in value]
+    return value
+
+
 TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
-    vol.Required(CONF_PID_PARAMS): vol.Any(
-        vol.Coerce(str),
-        {
-            vol.Required(CONF_PID_PARAMS_KP): vol.Coerce(float),
-            vol.Required(CONF_PID_PARAMS_KI): vol.Coerce(float),
-            vol.Required(CONF_PID_PARAMS_KD): vol.Coerce(float)
-        }
-    ),
+    vol.Optional(CONF_PID_PARAMS,
+                 default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
+                 ): _pid_params_list,
     vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
 })
 
@@ -151,18 +155,6 @@ def _extract_target(target, schema):
         return target
 
 
-def _extract_pid_params(raw_conf) -> PidParams:
-    if isinstance(raw_conf, dict):
-        return PidParams(
-            float(raw_conf[CONF_PID_PARAMS_KP]),
-            float(raw_conf[CONF_PID_PARAMS_KI]),
-            float(raw_conf[CONF_PID_PARAMS_KD])
-        )
-    if isinstance(raw_conf, str):
-        kp, ki, kd = raw_conf.split(",")
-        return PidParams(float(kp), float(ki), float(kd))
-
-
 def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
     # First use common schema
     conf = _extract_target(raw_conf, TARGET_SCHEMA_COMMON)
@@ -191,12 +183,13 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
 
     elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
         conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
+        pid_params = conf[CONF_PID_PARAMS]
 
         controller = NumberPidController(
             name,
             mode,
             entity_id,
-            _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
+            PidParams(pid_params[0], pid_params[1], pid_params[2]),
             inverted,
             conf[CONF_PID_SAMPLE_PERIOD]
         )
@@ -204,12 +197,13 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
 
     elif domain in [CLIMATE_DOMAIN]:
         conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
+        pid_params = conf[CONF_PID_PARAMS]
 
         controller = ClimatePidController(
             name,
             mode,
             entity_id,
-            _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
+            PidParams(pid_params[0], pid_params[1], pid_params[2]),
             inverted,
             conf[CONF_PID_SAMPLE_PERIOD]
         )

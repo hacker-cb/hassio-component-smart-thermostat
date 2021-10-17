@@ -240,6 +240,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid: Optional[PID] = None
         self._auto_tune = False
         self._last_output: Optional[float] = None
+        self._last_output_limits: None
 
     @final
     async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
@@ -357,6 +358,8 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         await self._async_turn_on()
 
+        self._last_output_limits = output_limits
+
         return True
 
     @final
@@ -378,6 +381,16 @@ class AbstractPidController(AbstractController, abc.ABC):
                          target_temp
                          )
             self._pid.setpoint = target_temp
+
+        output_limits = self.__get_output_limits()
+        if self._last_output_limits != output_limits:
+            _LOGGER.info("%s: %s - Output limits were changed from %s to %s",
+                         self._thermostat_entity_id,
+                         self.name,
+                         self._last_output_limits,
+                         output_limits
+                         )
+            self._pid.output_limits = output_limits
 
         temperature = self._round_to_target_precision(self._get_current_output())
 

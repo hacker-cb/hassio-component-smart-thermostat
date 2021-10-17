@@ -587,7 +587,7 @@ class NumberPidController(AbstractPidController):
             sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float],
-            switch_entity_id: Optional[str],
+            switch_entity_id: str,
             switch_inverted: bool
     ):
         super().__init__(name, mode, target_entity_id,
@@ -599,8 +599,7 @@ class NumberPidController(AbstractPidController):
 
     def get_used_entity_ids(self) -> [str]:
         ids = super().get_used_entity_ids()
-        if self._switch_entity_id:
-            ids.append(self._switch_entity_id)
+        ids.append(self._switch_entity_id)
         return ids
 
     @property
@@ -608,18 +607,12 @@ class NumberPidController(AbstractPidController):
         return self._is_on()
 
     def _is_on(self):
-        if not self._switch_entity_id:
-            # FIXME: not good behavior, may be need to make switch required?
-            return True  # Always working
         return self._hass.states.is_state(
             self._switch_entity_id,
             STATE_ON if not self._switch_inverted else STATE_OFF
         )
 
     async def _async_turn_on(self):
-        if not self._switch_entity_id:
-            return
-
         _LOGGER.debug("%s: %s - Turning on switch %s",
                       self._thermostat_entity_id,
                       self.name, self._switch_entity_id)
@@ -630,9 +623,6 @@ class NumberPidController(AbstractPidController):
         }, context=self._context)
 
     async def _async_turn_off(self):
-        if not self._switch_entity_id:
-            return
-
         _LOGGER.debug("%s: %s - Turning off switch %s",
                       self._thermostat_entity_id,
                       self.name, self._switch_entity_id)

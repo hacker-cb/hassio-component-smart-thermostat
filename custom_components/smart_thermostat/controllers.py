@@ -8,7 +8,7 @@ from simple_pid import PID
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, ATTR_HVAC_ACTION
 from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
-    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP
+    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP, CURRENT_HVAC_OFF
 from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
 from homeassistant.const import STATE_OFF
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
@@ -99,8 +99,9 @@ class AbstractController(abc.ABC):
     def running(self):
         return self.__running
 
+    @property
     @abc.abstractmethod
-    def is_working(self):
+    def working(self):
         """Is target working now?"""
 
     def get_used_entity_ids(self) -> [str]:
@@ -478,7 +479,8 @@ class SwitchController(AbstractController):
         self._hot_tolerance = hot_tolerance
         self._min_cycle_duration = min_cycle_duration
 
-    def is_working(self):
+    @property
+    def working(self):
         return self._is_on()
 
     async def _async_turn_on(self):
@@ -601,11 +603,13 @@ class NumberPidController(AbstractPidController):
             ids.append(self._switch_entity_id)
         return ids
 
-    def is_working(self):
+    @property
+    def working(self):
         return self._is_on()
 
     def _is_on(self):
         if not self._switch_entity_id:
+            # FIXME: not good behavior, may be need to make switch required?
             return True  # Always working
         return self._hass.states.is_state(
             self._switch_entity_id,
@@ -687,12 +691,13 @@ class ClimatePidController(AbstractPidController):
                          sample_period,
                          target_min, target_max)
 
-    def is_working(self):
+    @property
+    def working(self):
         state: State = self._hass.states.get(self._target_entity_id)
         if not state:
             return False
         hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
-        return hvac_action != CURRENT_HVAC_IDLE
+        return hvac_action not in (CURRENT_HVAC_IDLE, CURRENT_HVAC_OFF)
 
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)

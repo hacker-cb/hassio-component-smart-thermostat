@@ -313,18 +313,21 @@ class AbstractPidController(AbstractController, abc.ABC):
             pid_params.kp, pid_params.ki, pid_params.kp,
             setpoint=target_temp,
             output_limits=output_limits,
+            auto_mode=False,
             sample_time=self._sample_period.total_seconds()
         )
 
-        temperature = self.__round_to_target_precision(self._get_current_output())
-        if temperature:
-            self._pid.set_auto_mode(enabled=True, last_output=temperature)
+        current_output = self.__round_to_target_precision(self._get_current_output())
+        if current_output:
+            self._pid.set_auto_mode(enabled=True, last_output=current_output)
+        else:
+            self._pid.set_auto_mode(enabled=True)
 
         _LOGGER.info("%s: %s - Initialized.  PID params: %s, temperature: %s, limits: %s",
                      self._thermostat_entity_id,
                      self.name,
                      pid_params,
-                     temperature,
+                     current_output,
                      output_limits
                      )
 

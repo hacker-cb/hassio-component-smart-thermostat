@@ -193,13 +193,17 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
-def _create_controllers(name: str, mode: str, conf_list) -> [AbstractController]:
+def _create_controllers(prefix: str, mode: str, conf_list) -> [AbstractController]:
     if not isinstance(conf_list, list):
         conf_list = [conf_list]
 
     controllers: List[AbstractController] = []
 
+    controller_number = 1
+
     for conf in conf_list:
+        name = f"{prefix}_{controller_number}"
+
         entity_id = conf[CONF_ENTITY_ID]
         inverted = conf[CONF_INVERTED]
 
@@ -255,6 +259,8 @@ def _create_controllers(name: str, mode: str, conf_list) -> [AbstractController]
 
         else:
             _LOGGER.error(f"Unsupported {name} domain: '{domain}' for entity {entity_id}")
+
+        controller_number += 1
 
     return controllers
 

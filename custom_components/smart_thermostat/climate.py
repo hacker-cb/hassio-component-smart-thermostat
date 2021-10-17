@@ -56,8 +56,9 @@ from .controllers import SwitchController, Thermostat, AbstractController, PidPa
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_TOLERANCE = 0.3
-DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool modes and PID control support"
+DEFAULT_SWITCH_TOLERANCE = 0.3
+DEFAULT_GLOBAL_TOLERANCE = 0.2
+DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool mode and PID control support"
 DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
 DEFAULT_PID_KP = 1.0
 DEFAULT_PID_KI = 1.0
@@ -111,8 +112,8 @@ TARGET_SCHEMA_COMMON = vol.Schema({
 
 TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
-    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float,
-    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
+    vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_SWITCH_TOLERANCE): cv.positive_float,
+    vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_SWITCH_TOLERANCE): cv.positive_float
 })
 
 TARGET_SCHEMA_PID_REGULATOR_COMMON = TARGET_SCHEMA_COMMON.extend({
@@ -178,6 +179,8 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_GLOBAL_TOLERANCE): cv.positive_float,
+        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_GLOBAL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
             [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
@@ -193,7 +196,13 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
-def _create_controllers(prefix: str, mode: str, conf_list) -> [AbstractController]:
+def _create_controllers(
+        prefix: str,
+        mode: str,
+        conf_list,
+        global_cold_tolerance: float,
+        global_hot_tolerance: float
+) -> [AbstractController]:
     if not isinstance(conf_list, list):
         conf_list = [conf_list]
 
@@ -213,6 +222,27 @@ def _create_controllers(prefix: str, mode: str, conf_list) -> [AbstractControlle
             min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
             cold_tolerance = conf[CONF_COLD_TOLERANCE]
             hot_tolerance = conf[CONF_HOT_TOLERANCE]
+
+            if cold_tolerance < global_cold_tolerance:
+                _LOGGER.warning(
+                    "Cold tolerance (%s) < global hot tolerance (%s) "
+                    "for '%s' entity_id: %s. Switch will use global cold tolerance.",
+                    cold_tolerance,
+                    global_cold_tolerance,
+                    name,
+                    entity_id
+                )
+
+            if hot_tolerance < global_hot_tolerance:
+                _LOGGER.warning(
+                    "Hot tolerance (%s) < global hot tolerance (%s) "
+                    "for '%s' entity_id: %s. Switch will use global hot tolerance.",
+                    hot_tolerance,
+                    global_hot_tolerance,
+                    name,
+                    entity_id
+                )
+
 
             controller = SwitchController(
                 name,
@@ -278,6 +308,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
     target_temp = config.get(CONF_TARGET_TEMP)
+    cold_tolerance = config.get(CONF_COLD_TOLERANCE)
+    hot_tolerance = config.get(CONF_HOT_TOLERANCE)
     keep_alive = config.get(CONF_KEEP_ALIVE)
     initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE)
     away_temp = config.get(CONF_AWAY_TEMP)
@@ -288,8 +320,21 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     heater_config = config.get(CONF_HEATER)
     cooler_config = config.get(CONF_COOLER)
 
-    coolers = _create_controllers('cooler', HVAC_MODE_COOL, cooler_config) if cooler_config else None
-    heaters = _create_controllers('heater', HVAC_MODE_HEAT, heater_config) if heater_config else None
+    coolers = _create_controllers(
+        'cooler',
+        HVAC_MODE_COOL,
+        cooler_config,
+        cold_tolerance,
+        hot_tolerance
+    ) if cooler_config else None
+
+    heaters = _create_controllers(
+        'heater',
+        HVAC_MODE_HEAT,
+        heater_config,
+        cold_tolerance,
+        hot_tolerance
+    ) if heater_config else None
 
     async_add_entities(
         [
@@ -300,6 +345,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 min_temp,
                 max_temp,
                 target_temp,
+                cold_tolerance,
+                hot_tolerance,
                 keep_alive,
                 initial_hvac_mode,
                 away_temp,
@@ -323,6 +370,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             min_temp,
             max_temp,
             target_temp,
+            cold_tolerance,
+            hot_tolerance,
             keep_alive,
             initial_hvac_mode,
             away_temp,
@@ -345,6 +394,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._max_temp = max_temp
         self._attr_preset_mode = PRESET_NONE
         self._target_temp = target_temp
+        self._cold_tolerance = cold_tolerance
+        self._hot_tolerance = hot_tolerance
         self._unit = unit
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
@@ -634,11 +685,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             new_hvac_action = CURRENT_HVAC_IDLE
 
             if None not in (cur_temp, target_temp):
+
+                too_cold = cur_temp <= target_temp - self._cold_tolerance
+                too_hot = cur_temp >= target_temp + self._hot_tolerance
+
                 if cur_temp == target_temp:
                     pass
-                elif cur_temp > target_temp and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
+                elif too_hot and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
                     new_hvac_action = CURRENT_HVAC_COOL
-                elif cur_temp < target_temp and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
+                elif too_cold and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
                     new_hvac_action = CURRENT_HVAC_HEAT
                 debug_info = f"hvac_action: {new_hvac_action}, (cur: {cur_temp}, target: {target_temp})"
             else:

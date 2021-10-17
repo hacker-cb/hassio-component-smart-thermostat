@@ -5,7 +5,7 @@ forked from HA-core `generic_thermostat` 827501659c926ace3741425760b1294d2e93b48
 import asyncio
 import logging
 import math
-from typing import Mapping, Any, Optional
+from typing import Mapping, Any, Optional, List
 
 import voluptuous as vol
 from voluptuous import ALLOW_EXTRA
@@ -170,8 +170,8 @@ KEY_SCHEMA = vol.Schema({
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
-        vol.Optional(CONF_HEATER): _cv_controller_target,
-        vol.Optional(CONF_COOLER): _cv_controller_target,
+        vol.Optional(CONF_HEATER): vol.Any(_cv_controller_target, [_cv_controller_target]),
+        vol.Optional(CONF_COOLER): vol.Any(_cv_controller_target, [_cv_controller_target]),
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
@@ -193,63 +193,70 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
-def _create_controller(name: str, mode: str, conf) -> AbstractController:
+def _create_controllers(name: str, mode: str, conf_list) -> [AbstractController]:
+    if not isinstance(conf_list, list):
+        conf_list = [conf_list]
 
-    entity_id = conf[CONF_ENTITY_ID]
-    inverted = conf[CONF_INVERTED]
+    controllers: List[AbstractController] = []
 
-    domain = split_entity_id(entity_id)[0]
+    for conf in conf_list:
+        entity_id = conf[CONF_ENTITY_ID]
+        inverted = conf[CONF_INVERTED]
 
-    if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
-        min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
-        cold_tolerance = conf[CONF_COLD_TOLERANCE]
-        hot_tolerance = conf[CONF_HOT_TOLERANCE]
+        domain = split_entity_id(entity_id)[0]
 
-        controller = SwitchController(
-            name,
-            mode,
-            entity_id,
-            cold_tolerance,
-            hot_tolerance,
-            inverted,
-            min_duration
-        )
-        return controller
+        if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
+            min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
+            cold_tolerance = conf[CONF_COLD_TOLERANCE]
+            hot_tolerance = conf[CONF_HOT_TOLERANCE]
 
-    elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
-        pid_params = conf[CONF_PID_PARAMS]
+            controller = SwitchController(
+                name,
+                mode,
+                entity_id,
+                cold_tolerance,
+                hot_tolerance,
+                inverted,
+                min_duration
+            )
+            controllers.append(controller)
 
-        controller = NumberPidController(
-            name,
-            mode,
-            entity_id,
-            PidParams(pid_params[0], pid_params[1], pid_params[2]),
-            inverted,
-            conf[CONF_PID_SAMPLE_PERIOD],
-            conf[CONF_PID_MIN],
-            conf[CONF_PID_MAX],
-            conf[CONF_PID_SWITCH_ENTITY_ID],
-            conf[CONF_PID_SWITCH_INVERTED]
-        )
-        return controller
+        elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
+            pid_params = conf[CONF_PID_PARAMS]
 
-    elif domain in [CLIMATE_DOMAIN]:
-        pid_params = conf[CONF_PID_PARAMS]
+            controller = NumberPidController(
+                name,
+                mode,
+                entity_id,
+                PidParams(pid_params[0], pid_params[1], pid_params[2]),
+                inverted,
+                conf[CONF_PID_SAMPLE_PERIOD],
+                conf[CONF_PID_MIN],
+                conf[CONF_PID_MAX],
+                conf[CONF_PID_SWITCH_ENTITY_ID],
+                conf[CONF_PID_SWITCH_INVERTED]
+            )
+            controllers.append(controller)
 
-        controller = ClimatePidController(
-            name,
-            mode,
-            entity_id,
-            PidParams(pid_params[0], pid_params[1], pid_params[2]),
-            inverted,
-            conf[CONF_PID_SAMPLE_PERIOD],
-            conf[CONF_PID_MIN],
-            conf[CONF_PID_MAX]
-        )
-        return controller
+        elif domain in [CLIMATE_DOMAIN]:
+            pid_params = conf[CONF_PID_PARAMS]
 
-    else:
-        raise ValueError(f"Unsupported {name} domain: '{domain}'")
+            controller = ClimatePidController(
+                name,
+                mode,
+                entity_id,
+                PidParams(pid_params[0], pid_params[1], pid_params[2]),
+                inverted,
+                conf[CONF_PID_SAMPLE_PERIOD],
+                conf[CONF_PID_MIN],
+                conf[CONF_PID_MAX]
+            )
+            controllers.append(controller)
+
+        else:
+            _LOGGER.error(f"Unsupported {name} domain: '{domain}' for entity {entity_id}")
+
+    return controllers
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -275,15 +282,14 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     heater_config = config.get(CONF_HEATER)
     cooler_config = config.get(CONF_COOLER)
 
-    cooler = _create_controller('cooler', HVAC_MODE_COOL, cooler_config) if cooler_config else None
-    heater = _create_controller('heater', HVAC_MODE_HEAT, heater_config) if heater_config else None
+    coolers = _create_controllers('cooler', HVAC_MODE_COOL, cooler_config) if cooler_config else None
+    heaters = _create_controllers('heater', HVAC_MODE_HEAT, heater_config) if heater_config else None
 
     async_add_entities(
         [
             SmartThermostat(
                 name,
-                cooler,
-                heater,
+                coolers + heaters,
                 sensor_entity_id,
                 min_temp,
                 max_temp,
@@ -306,8 +312,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def __init__(
             self,
             name,
-            cooler: AbstractController,
-            heater: AbstractController,
+            controllers: [AbstractController],
             sensor_entity_id,
             min_temp,
             max_temp,
@@ -321,6 +326,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     ):
         """Initialize the thermostat."""
         self._name = name
+        self._controllers = controllers
         self.sensor_entity_id = sensor_entity_id
         self._keep_alive = keep_alive
         self._hvac_mode = initial_hvac_mode
@@ -343,14 +349,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         else:
             self._attr_preset_modes = [PRESET_NONE]
         self._away_temp = away_temp
-
-        self._controllers = []
-
-        if cooler:
-            self._controllers.append(cooler)
-
-        if heater:
-            self._controllers.append(heater)
 
         for controller in self._controllers:
             controller.set_thermostat(self)

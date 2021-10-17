@@ -59,6 +59,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TOLERANCE = 0.3
 DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool modes and PID control support"
+DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
 CONF_HEATER = "heater"
 CONF_COOLER = "cooler"
 CONF_INVERTED = "inverted"
@@ -77,6 +78,7 @@ CONF_PID_PARAMS = "pid_params"
 CONF_PID_PARAMS_KP = "kp"
 CONF_PID_PARAMS_KI = "ki"
 CONF_PID_PARAMS_KD = "kd"
+CONF_PID_SAMPLE_PERIOD = "sample_period"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
 
@@ -99,7 +101,8 @@ TARGET_SCHEMA_PID_REGULATOR = TARGET_SCHEMA_COMMON.extend({
             vol.Required(CONF_PID_PARAMS_KI): vol.Coerce(float),
             vol.Required(CONF_PID_PARAMS_KD): vol.Coerce(float)
         }
-    )
+    ),
+    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
 })
 
 KEY_SCHEMA = vol.Schema({
@@ -194,7 +197,8 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             mode,
             entity_id,
             _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
-            inverted
+            inverted,
+            conf[CONF_PID_SAMPLE_PERIOD]
         )
         return controller
 
@@ -206,7 +210,8 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             mode,
             entity_id,
             _extract_pid_params(conf[CONF_PID_PARAMS]) if conf[CONF_PID_PARAMS] else None,
-            inverted
+            inverted,
+            conf[CONF_PID_SAMPLE_PERIOD]
         )
         return controller
 
@@ -592,7 +597,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             for controller in self._controllers:
                 if controller.running:
                     await controller.async_control(time=time, force=force)
-
 
     @property
     def supported_features(self):

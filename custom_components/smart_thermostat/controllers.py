@@ -1,5 +1,6 @@
 import abc
 import logging
+from datetime import timedelta
 from typing import Optional, final, Mapping, Any
 
 from simple_pid import PID
@@ -14,7 +15,7 @@ from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVI
 from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 
 ATTR_PID_PARAMS = "pid_params"
 
@@ -63,7 +64,7 @@ class AbstractController(abc.ABC):
             target_entity_id: str,
             inverted: bool
     ):
-        self.__thermostat: Optional[Thermostat] = None
+        self._thermostat: Optional[Thermostat] = None
         self.name = name
         self._mode = mode
         self._target_entity_id = target_entity_id
@@ -74,22 +75,22 @@ class AbstractController(abc.ABC):
             raise ValueError(f"Unsupported mode: '{mode}'")
 
     def set_thermostat(self, thermostat: Thermostat):
-        self.__thermostat = thermostat
+        self._thermostat = thermostat
 
     @property
     @final
     def _hvac_mode(self) -> str:
-        return self.__thermostat.get_hvac_mode()
+        return self._thermostat.get_hvac_mode()
 
     @property
     @final
     def _context(self) -> Context:
-        return self.__thermostat.get_context()
+        return self._thermostat.get_context()
 
     @property
     @final
     def _thermostat_entity_id(self) -> str:
-        return self.__thermostat.get_entity_id()
+        return self._thermostat.get_entity_id()
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
@@ -99,7 +100,7 @@ class AbstractController(abc.ABC):
         """Will be called in Entity async_added_to_hass()"""
         self._hass = hass
 
-        self.__thermostat.async_on_remove(
+        self._thermostat.async_on_remove(
             async_track_state_change_event(
                 self._hass, [self._target_entity_id], self._on_target_entity_state_changed
             )
@@ -118,7 +119,7 @@ class AbstractController(abc.ABC):
         self._hass.create_task(self.async_control())
 
         # notify to handle correct current HVAC mode
-        self.__thermostat.async_write_ha_state()
+        self._thermostat.async_write_ha_state()
 
     @property
     def running(self):
@@ -130,8 +131,8 @@ class AbstractController(abc.ABC):
 
     @final
     async def async_start(self):
-        cur_temp = self.__thermostat.get_current_temperature()
-        target_temp = self.__thermostat.get_target_temperature()
+        cur_temp = self._thermostat.get_current_temperature()
+        target_temp = self._thermostat.get_target_temperature()
 
         _LOGGER.debug(
             "%s: %s - Trying to start controller, cur: %, target: %s "
@@ -186,8 +187,8 @@ class AbstractController(abc.ABC):
         if not self.__running:
             return
 
-        cur_temp = self.__thermostat.get_current_temperature()
-        target_temp = self.__thermostat.get_target_temperature()
+        cur_temp = self._thermostat.get_current_temperature()
+        target_temp = self._thermostat.get_target_temperature()
 
         await self._async_control(cur_temp, target_temp, time=time, force=force)
 
@@ -218,13 +219,16 @@ class AbstractPidController(AbstractController, abc.ABC):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
-            inverted: bool
+            inverted: bool,
+            sample_period: timedelta,
     ):
         super().__init__(name, mode, target_entity_id, inverted)
         self._initial_pid_params = pid_params
         self._current_pid_params: Optional[PidParams] = None
+        self._sample_period = sample_period
         self._pid: Optional[PID] = None
         self._auto_tune = False
+        self._last_output: Optional[float] = None
 
     @final
     async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
@@ -250,6 +254,12 @@ class AbstractPidController(AbstractController, abc.ABC):
                              self._initial_pid_params
                              )
                 self.set_pid_params(self._initial_pid_params)
+
+        self._thermostat.async_on_remove(
+            async_track_time_interval(
+                self._hass, self.async_control, self._sample_period
+            )
+        )
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
@@ -318,18 +328,19 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid = PID(
             pid_params.kp, pid_params.ki, pid_params.kp,
             setpoint=target_temp,
-            output_limits=output_limits
+            output_limits=output_limits,
+            sample_time=self._sample_period.total_seconds()
         )
 
-        current_output = self._get_current_output()
-        if current_output:
-            self._pid.set_auto_mode(enabled=True, last_output=current_output)
+        temperature = self._round_to_target_precision(self._get_current_output())
+        if temperature:
+            self._pid.set_auto_mode(enabled=True, last_output=temperature)
 
-        _LOGGER.info("%s: %s - Initialized.  PID params: %s, current output: %s",
+        _LOGGER.info("%s: %s - Initialized.  PID params: %s, temperature: %s",
                      self._thermostat_entity_id,
                      self.name,
                      pid_params,
-                     current_output
+                     temperature
                      )
 
         await self._async_turn_on()
@@ -347,6 +358,9 @@ class AbstractPidController(AbstractController, abc.ABC):
             _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
             return False
 
+        _LOGGER.debug("%s: %s - Control, sample period: %s ",
+                      self._thermostat_entity_id, self.name, self._sample_period)
+
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
                          self._thermostat_entity_id,
@@ -356,9 +370,18 @@ class AbstractPidController(AbstractController, abc.ABC):
                          )
             self._pid.setpoint = target_temp
 
-        output = float(self._pid(cur_temp))
+        temperature = self._round_to_target_precision(self._get_current_output())
 
-        temperature = self._get_current_output()
+        if self._last_output is not None and self._last_output != temperature:
+            _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator",
+                         self._thermostat_entity_id,
+                         self.name,
+                         self._last_output,
+                         temperature
+                         )
+            await self._async_start(cur_temp, target_temp)
+
+        output = self._round_to_target_precision(float(self._pid(cur_temp)))
 
         if temperature != output:
             _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
@@ -370,6 +393,12 @@ class AbstractPidController(AbstractController, abc.ABC):
                           output
                           )
             await self._apply_output(output)
+
+        self._last_output = output
+
+    def _round_to_target_precision(self, value: float) -> float:
+        # FIXME: use target attr precision
+        return round(value, 1)
 
     @abc.abstractmethod
     def _get_current_output(self):
@@ -522,9 +551,10 @@ class NumberPidController(AbstractPidController):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
-            inverted: bool
+            inverted: bool,
+            sample_period: timedelta
     ):
-        super().__init__(name, mode, target_entity_id, pid_params, inverted)
+        super().__init__(name, mode, target_entity_id, pid_params, inverted, sample_period)
 
     def is_working(self):
         return True
@@ -568,9 +598,10 @@ class ClimatePidController(AbstractPidController):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
-            inverted: bool
+            inverted: bool,
+            sample_period: timedelta
     ):
-        super().__init__(name, mode, target_entity_id, pid_params, inverted)
+        super().__init__(name, mode, target_entity_id, pid_params, inverted, sample_period)
 
     def is_working(self):
         state: State = self._hass.states.get(self._target_entity_id)

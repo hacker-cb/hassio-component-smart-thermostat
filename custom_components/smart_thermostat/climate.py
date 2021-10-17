@@ -67,6 +67,7 @@ CONF_HEATER = "heater"
 CONF_COOLER = "cooler"
 CONF_INVERTED = "inverted"
 CONF_SENSOR = "target_sensor"
+CONF_STALE_DURATION = "sensor_stale_duration"
 CONF_MIN_TEMP = "min_temp"
 CONF_MAX_TEMP = "max_temp"
 CONF_TARGET_TEMP = "target_temp"
@@ -174,6 +175,9 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_HEATER): vol.Any(_cv_controller_target, [_cv_controller_target]),
         vol.Optional(CONF_COOLER): vol.Any(_cv_controller_target, [_cv_controller_target]),
         vol.Required(CONF_SENSOR): cv.entity_id,
+        vol.Optional(CONF_STALE_DURATION): vol.All(
+            cv.time_period, cv.positive_timedelta
+        ),
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
         vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
@@ -304,6 +308,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
     name = config.get(CONF_NAME)
     sensor_entity_id = config.get(CONF_SENSOR)
+    sensor_stale_duration = config.get(CONF_STALE_DURATION)
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
     target_temp = config.get(CONF_TARGET_TEMP)
@@ -341,6 +346,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 name,
                 coolers + heaters,
                 sensor_entity_id,
+                sensor_stale_duration,
                 min_temp,
                 max_temp,
                 target_temp,
@@ -366,6 +372,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             name,
             controllers: [AbstractController],
             sensor_entity_id,
+            sensor_stale_duration,
             min_temp,
             max_temp,
             target_temp,
@@ -399,6 +406,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
         self._hvac_action = CURRENT_HVAC_IDLE
+        self._sensor_stale_duration = sensor_stale_duration
+        self._remove_stale_tracking = None
         if away_temp:
             self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
             self._attr_preset_modes = [PRESET_NONE, PRESET_AWAY]
@@ -449,14 +458,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             self.async_write_ha_state()
 
         @callback
-        def _async_startup(*_):
+        async def _async_startup(*_):
             """Init on startup."""
             sensor_state = self.hass.states.get(self.sensor_entity_id)
             if sensor_state and sensor_state.state not in (
                     STATE_UNAVAILABLE,
                     STATE_UNKNOWN,
             ):
-                self._async_update_temp(sensor_state)
+                await self._async_update_temp(sensor_state)
                 self.async_write_ha_state()
 
             _LOGGER.info("%s: Ready, supported HVAC modes: %s", self.name, self._hvac_list)
@@ -464,7 +473,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             self.hass.create_task(_async_first_run())
 
         if self.hass.state == CoreState.running:
-            _async_startup()
+            await _async_startup()
         else:
             self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, _async_startup)
 
@@ -651,9 +660,31 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         if new_state is None:
             return
 
-        self._async_update_temp(new_state.state)
+        await self._async_update_temp(new_state.state)
+
+        if self._cur_temp is not None and self._sensor_stale_duration:
+            if self._remove_stale_tracking:
+                self._remove_stale_tracking()
+            self._remove_stale_tracking = async_track_time_interval(
+                self.hass,
+                self._async_sensor_not_responding,
+                self._sensor_stale_duration,
+            )
+
         await self._async_control()
         self.async_write_ha_state()
+
+    @callback
+    async def _async_sensor_not_responding(self, now=None):
+        """Handle sensor stale event."""
+
+        _LOGGER.debug(
+            "%s: Sensor has not been updated for %s",
+            self.entity_id,
+            now - self.hass.states.get(self.sensor_entity_id).last_updated,
+        )
+        _LOGGER.warning("%s: Sensor is stalled, all controllers will be stopped.", self.entity_id)
+        await self._async_update_temp("Stalled")
 
     async def _async_controller_target_entity_changed(self, event):
         """Handle controller target entity changes."""
@@ -662,14 +693,14 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self.async_write_ha_state()
 
     @callback
-    def _async_update_temp(self, temp):
+    async def _async_update_temp(self, temp):
         """Update thermostat with latest state from sensor."""
         try:
             self._cur_temp = float(temp)
             if math.isnan(self._cur_temp) or math.isinf(self._cur_temp):
                 raise ValueError(f"Sensor has illegal value {temp}")
 
-        except ValueError as ex:
+        except (ValueError, TypeError) as ex:
             self._cur_temp = None
             _LOGGER.error("%s: Unable to update from sensor: %s", self.name, ex)
 

@@ -12,7 +12,7 @@ from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SE
 from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
 from homeassistant.const import STATE_OFF
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
-from homeassistant.core import DOMAIN as HA_DOMAIN, HomeAssistant, Context, CALLBACK_TYPE, State
+from homeassistant.core import DOMAIN as HA_DOMAIN, HomeAssistant, Context, CALLBACK_TYPE, State, split_entity_id
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
 from homeassistant.helpers.event import async_track_time_interval
@@ -79,7 +79,10 @@ class AbstractController(abc.ABC):
         return self._mode
 
     def _context(self) -> Context:
-        return self._thermostat.get_context()
+        ctx = self._thermostat.get_context()
+        if not ctx:
+            _LOGGER.error("No context available")
+        return ctx
 
     @property
     @final
@@ -580,30 +583,67 @@ class NumberPidController(AbstractPidController):
             inverted: bool,
             sample_period: timedelta,
             target_min: Optional[float],
-            target_max: Optional[float]
+            target_max: Optional[float],
+            switch_entity_id: Optional[str],
+            switch_inverted: bool
     ):
         super().__init__(name, mode, target_entity_id,
                          pid_params, inverted,
                          sample_period,
                          target_min, target_max)
+        self._switch_entity_id = switch_entity_id
+        self._switch_inverted = switch_inverted
+
+    def get_used_entity_ids(self) -> [str]:
+        ids = super().get_used_entity_ids()
+        if self._switch_entity_id:
+            ids.append(self._switch_entity_id)
+        return ids
 
     def is_working(self):
-        return True
+        return self._is_on()
+
+    def _is_on(self):
+        if not self._switch_entity_id:
+            return True  # Always working
+        return self._hass.states.is_state(
+            self._switch_entity_id,
+            STATE_ON if not self._switch_inverted else STATE_OFF
+        )
+
+    async def _async_turn_on(self):
+        if not self._switch_entity_id:
+            return
+
+        _LOGGER.debug("%s: %s - Turning on switch %s",
+                      self._thermostat_entity_id,
+                      self.name, self._switch_entity_id)
+
+        service = SERVICE_TURN_ON if not self._switch_inverted else SERVICE_TURN_OFF
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._switch_entity_id
+        }, context=self._context)
+
+    async def _async_turn_off(self):
+        if not self._switch_entity_id:
+            return
+
+        _LOGGER.debug("%s: %s - Turning off switch %s",
+                      self._thermostat_entity_id,
+                      self.name, self._switch_entity_id)
+
+        service = SERVICE_TURN_OFF if not self._switch_inverted else SERVICE_TURN_ON
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._switch_entity_id
+        }, context=self._context)
 
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)
         if state:
             return float(state.state)
 
-    async def _async_turn_on(self):
-        pass
-
-    async def _async_turn_off(self):
-        pass
-
     def _get_target_output_limits(self):
-        min_temp = None
-        max_temp = None
+        min_temp, max_temp = (None, None)
 
         state: State = self._hass.states.get(self._target_entity_id)
         if state:
@@ -613,13 +653,20 @@ class NumberPidController(AbstractPidController):
         return min_temp, max_temp
 
     async def _apply_output(self, output: float):
-        domain, _ = self._target_entity_id.split('.')
+        domain = split_entity_id(self._target_entity_id)[0]
+
         await self._hass.services.async_call(
             domain, SERVICE_SET_VALUE, {
                 ATTR_ENTITY_ID: self._target_entity_id,
                 ATTR_VALUE: output
             }, context=self._context
         )
+
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+        if not self._is_on():
+            await self._async_turn_on()
+
+        await super()._async_control(cur_temp, target_temp, time, force)
 
 
 class ClimatePidController(AbstractPidController):

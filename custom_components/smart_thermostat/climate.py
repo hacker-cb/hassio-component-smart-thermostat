@@ -42,7 +42,7 @@ from homeassistant.const import (
     PRECISION_HALVES,
     PRECISION_WHOLE
 )
-from homeassistant.core import CoreState, callback, Context, HomeAssistant
+from homeassistant.core import CoreState, callback, Context, HomeAssistant, split_entity_id
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.config_validation import PLATFORM_SCHEMA
 from homeassistant.helpers.event import (
@@ -80,6 +80,8 @@ CONF_PID_PARAMS = "pid_params"
 CONF_PID_SAMPLE_PERIOD = "sample_period"
 CONF_PID_MIN = "min"
 CONF_PID_MAX = "max"
+CONF_PID_SWITCH_ENTITY_ID = "switch_entity_id"
+CONF_PID_SWITCH_INVERTED = "switch_inverted"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
 
@@ -113,17 +115,52 @@ TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): cv.positive_float
 })
 
-TARGET_SCHEMA_PID_REGULATOR = vol.All(
-    TARGET_SCHEMA_COMMON.extend({
-        vol.Optional(CONF_PID_PARAMS,
-                     default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
-                     ): _cv_pid_params_list,
-        vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
-        vol.Optional(CONF_PID_MIN, default=None): vol.Any(None, vol.Coerce(float)),
-        vol.Optional(CONF_PID_MAX, default=None): vol.Any(None, vol.Coerce(float))
-    }),
-    _cv_min_max_check
-)
+TARGET_SCHEMA_PID_REGULATOR_COMMON = TARGET_SCHEMA_COMMON.extend({
+    vol.Optional(CONF_PID_PARAMS,
+                 default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
+                 ): _cv_pid_params_list,
+    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
+    vol.Optional(CONF_PID_MIN, default=None): vol.Any(None, vol.Coerce(float)),
+    vol.Optional(CONF_PID_MAX, default=None): vol.Any(None, vol.Coerce(float))
+})
+
+TARGET_SCHEMA_PID_REGULATOR_CLIMATE = TARGET_SCHEMA_PID_REGULATOR_COMMON.extend({
+})
+
+TARGET_SCHEMA_PID_REGULATOR_NUMBER = TARGET_SCHEMA_PID_REGULATOR_COMMON.extend({
+    vol.Optional(CONF_PID_SWITCH_ENTITY_ID, default=None):
+        vol.Any(None, cv.entity_domain([SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN])),
+    vol.Optional(CONF_PID_SWITCH_INVERTED, default=False): vol.Coerce(bool)
+})
+
+
+def _cv_controller_target(cfg: Any) -> Any:
+    entity_id: str
+
+    if isinstance(cfg, str):
+        entity_id = cfg
+        cfg = {
+            CONF_ENTITY_ID: entity_id
+        }
+
+    if CONF_ENTITY_ID not in cfg:
+        raise vol.Invalid(f"{CONF_ENTITY_ID} should be specified")
+
+    entity_id = cfg[CONF_ENTITY_ID]
+
+    domain = split_entity_id(entity_id)[0]
+
+    cfg = _cv_min_max_check(cfg)
+
+    if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
+        return TARGET_SCHEMA_SWITCH(cfg)
+    elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
+        return TARGET_SCHEMA_PID_REGULATOR_NUMBER(cfg)
+    elif domain in [CLIMATE_DOMAIN]:
+        return TARGET_SCHEMA_PID_REGULATOR_CLIMATE(cfg)
+    else:
+        raise vol.Invalid(f"{entity_id}:  Unsupported domain: {domain}")
+
 
 KEY_SCHEMA = vol.Schema({
     vol.Required(
@@ -133,14 +170,8 @@ KEY_SCHEMA = vol.Schema({
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
-        vol.Optional(CONF_HEATER): vol.Any(
-            cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-            vol.Any(TARGET_SCHEMA_SWITCH, TARGET_SCHEMA_PID_REGULATOR)
-        ),
-        vol.Optional(CONF_COOLER): vol.Any(
-            cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-            vol.Any(TARGET_SCHEMA_SWITCH, TARGET_SCHEMA_PID_REGULATOR)
-        ),
+        vol.Optional(CONF_HEATER): _cv_controller_target,
+        vol.Optional(CONF_COOLER): _cv_controller_target,
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
@@ -162,26 +193,14 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
 PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 
 
-def _extract_target(target, schema):
-    if isinstance(target, str):
-        return schema({
-            CONF_ENTITY_ID: target
-        })
-    else:
-        return target
-
-
-def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
-    # First use common schema
-    conf = _extract_target(raw_conf, TARGET_SCHEMA_COMMON)
+def _create_controller(name: str, mode: str, conf) -> AbstractController:
 
     entity_id = conf[CONF_ENTITY_ID]
     inverted = conf[CONF_INVERTED]
 
-    domain, _ = entity_id.split('.')
+    domain = split_entity_id(entity_id)[0]
 
     if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
-        conf = _extract_target(raw_conf, TARGET_SCHEMA_SWITCH)
         min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
         cold_tolerance = conf[CONF_COLD_TOLERANCE]
         hot_tolerance = conf[CONF_HOT_TOLERANCE]
@@ -198,7 +217,6 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
         return controller
 
     elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
-        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
         pid_params = conf[CONF_PID_PARAMS]
 
         controller = NumberPidController(
@@ -209,12 +227,13 @@ def _create_controller(name: str, mode: str, raw_conf) -> AbstractController:
             inverted,
             conf[CONF_PID_SAMPLE_PERIOD],
             conf[CONF_PID_MIN],
-            conf[CONF_PID_MAX]
+            conf[CONF_PID_MAX],
+            conf[CONF_PID_SWITCH_ENTITY_ID],
+            conf[CONF_PID_SWITCH_INVERTED]
         )
         return controller
 
     elif domain in [CLIMATE_DOMAIN]:
-        conf = _extract_target(raw_conf, TARGET_SCHEMA_PID_REGULATOR)
         pid_params = conf[CONF_PID_PARAMS]
 
         controller = ClimatePidController(
@@ -630,15 +649,19 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             for controller in self._controllers:
                 if self._hvac_action != CURRENT_HVAC_COOL and controller.mode == HVAC_MODE_COOL and controller.running:
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, debug_info)
+                    await controller.async_stop()
                 if self._hvac_action != CURRENT_HVAC_HEAT and controller.mode == HVAC_MODE_HEAT and controller.running:
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, debug_info)
+                    await controller.async_stop()
 
             # Start all controllers which are needed
             for controller in self._controllers:
                 if self._hvac_action == CURRENT_HVAC_COOL and controller.mode == HVAC_MODE_COOL and not controller.running:
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
+                    await controller.async_start()
                 if self._hvac_action == CURRENT_HVAC_HEAT and controller.mode == HVAC_MODE_HEAT and not controller.running:
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
+                    await controller.async_start()
 
             # Call async_control() on running controllers
             for controller in self._controllers:

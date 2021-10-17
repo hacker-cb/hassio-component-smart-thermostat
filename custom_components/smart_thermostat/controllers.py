@@ -6,7 +6,7 @@ from typing import Optional, final, Mapping, Any
 from simple_pid import PID
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
-from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL, ATTR_HVAC_ACTION
+from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, ATTR_HVAC_ACTION
 from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
     SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP
 from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
@@ -26,10 +26,6 @@ class Thermostat(abc.ABC):
     @abc.abstractmethod
     def get_entity_id(self) -> str:
         """Get Entity name instance"""
-
-    @abc.abstractmethod
-    def get_hvac_mode(self) -> str:
-        """Get Current HVAC mode"""
 
     @abc.abstractmethod
     def get_context(self) -> Context:
@@ -76,11 +72,6 @@ class AbstractController(abc.ABC):
 
     def set_thermostat(self, thermostat: Thermostat):
         self._thermostat = thermostat
-
-    @property
-    @final
-    def _hvac_mode(self) -> str:
-        return self._thermostat.get_hvac_mode()
 
     @property
     @final
@@ -535,17 +526,7 @@ class SwitchController(AbstractController):
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
 
-        need_turn_on = False
-        if (
-                too_hot and
-                self._mode == HVAC_MODE_COOL and
-                self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]
-        ) or (
-                too_cold and
-                self._mode == HVAC_MODE_HEAT and
-                self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]
-        ):
-            need_turn_on = True
+        need_turn_on = (too_hot and self._mode == HVAC_MODE_COOL) or (too_cold and self._mode == HVAC_MODE_HEAT)
 
         _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, (cur: %s, target: %s)",
                       self._thermostat_entity_id,
@@ -560,26 +541,26 @@ class SwitchController(AbstractController):
 
         if self._is_on():
             if not need_turn_on:
-                _LOGGER.info("%s: Turning off %s %s",
+                _LOGGER.info("%s: %s - Turning off %s",
                              self._thermostat_entity_id,
                              self.name, self._target_entity_id)
                 await self._async_turn_off()
             elif time is not None:
                 # The time argument is passed only in keep-alive case
-                _LOGGER.info("%s: Keep-alive - Turning on %s %s",
+                _LOGGER.info("%s: %s - Keep-alive - Turning on %s",
                              self._thermostat_entity_id,
                              self.name, self._target_entity_id)
                 await self._async_turn_on()
         else:
             if need_turn_on:
-                _LOGGER.info("%s: Turning on %s %s",
+                _LOGGER.info("%s: %s - Turning on %s",
                              self._thermostat_entity_id,
                              self.name, self._target_entity_id)
                 await self._async_turn_on()
             elif time is not None:
                 # The time argument is passed only in keep-alive case
                 _LOGGER.info(
-                    "%s: Keep-alive - Turning off %s %s",
+                    "%s: %s - Keep-alive - Turning off %s",
                     self._thermostat_entity_id,
                     self.name, self._target_entity_id
                 )

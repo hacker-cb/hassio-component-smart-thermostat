@@ -431,9 +431,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     def get_entity_id(self) -> str:
         return self.entity_id
 
-    def get_hvac_mode(self) -> str:
-        return self.hvac_mode
-
     def get_context(self) -> Context:
         return self._context
 

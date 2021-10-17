@@ -190,6 +190,13 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
+        _LOGGER.debug("%s: %s - Control: cur: %s, target: %s",
+                      self._thermostat_entity_id,
+                      self.name,
+                      cur_temp,
+                      target_temp
+                      )
+
         await self._async_control(cur_temp, target_temp, time=time, force=force)
 
     @abc.abstractmethod
@@ -357,9 +364,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
             return False
-
-        _LOGGER.debug("%s: %s - Control, sample period: %s ",
-                      self._thermostat_entity_id, self.name, self._sample_period)
 
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
@@ -562,7 +566,7 @@ class NumberPidController(AbstractPidController):
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)
         if state:
-            return float(state)
+            return float(state.state)
 
     async def _async_turn_on(self):
         pass

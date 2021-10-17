@@ -563,30 +563,35 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             need_heat = False
             need_cool = False
 
-            if cur_temp == target_temp:
-                pass
-            elif cur_temp > target_temp and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
-                need_cool = True
-            elif cur_temp < target_temp and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
-                need_heat = True
+            debug_info = None
+            _ = debug_info
+
+            if None not in (need_cool, need_heat):
+                if cur_temp == target_temp:
+                    pass
+                elif cur_temp > target_temp and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
+                    need_cool = True
+                elif cur_temp < target_temp and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
+                    need_heat = True
+                debug_info = f"need_cool: {need_cool}, need_heat: {need_heat} (cur: {cur_temp}, target: {target_temp})"
+            else:
+                debug_info = f"current/target not available (cur: {cur_temp}, target: {target_temp})"
 
             if not need_cool and self._cooler and self._cooler.running:
-                _LOGGER.debug("%s: Stopping %s", self.entity_id, self._cooler.name)
+                _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, self._cooler.name, debug_info)
                 await self._cooler.async_stop()
 
             if not need_heat and self._heater and self._heater.running:
-                _LOGGER.debug("%s: Stopping %s", self.entity_id, self._heater.name)
+                _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, self._heater.name, debug_info)
                 await self._heater.async_stop()
 
             if need_cool and (not self._cooler or not self._cooler.running):
-                _LOGGER.debug("%s: Starting %s", self.entity_id, self._cooler.name)
+                _LOGGER.debug("%s: Starting %s, %s", self.entity_id, self._cooler.name, debug_info)
                 await self._cooler.async_start()
 
             if need_heat and (not self._heater or not self._heater.running):
-                _LOGGER.debug("%s: Starting %s", self.entity_id, self._heater.name)
+                _LOGGER.debug("%s: Starting %s, %s", self.entity_id, self._heater.name, debug_info)
                 await self._heater.async_start()
-
-            _LOGGER.debug("%s: Calling async control on controllers", self.entity_id)
 
             for controller in self._controllers:
                 if controller.running:

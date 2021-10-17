@@ -105,12 +105,6 @@ class AbstractController(abc.ABC):
         """Will be called in Entity async_added_to_hass()"""
         self._hass = hass
 
-    def async_startup(self):
-        """
-        Startup method. Will ve called after HA core started
-        """
-        self._hass.create_task(self.async_control())
-
     @property
     def running(self):
         return self.__running

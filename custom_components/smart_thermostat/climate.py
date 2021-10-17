@@ -369,6 +369,11 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 )
             )
 
+        async def _async_first_run():
+            """Will called one time. Need on hot reload when HA core is running"""
+            await self._async_control()
+            self.async_write_ha_state()
+
         @callback
         def _async_startup(*_):
             """Init on startup."""
@@ -382,8 +387,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             _LOGGER.info("%s: Ready, supported HVAC modes: %s", self.name, self._hvac_list)
 
-            for contr in self._controllers:
-                contr.async_startup()
+            self.hass.create_task(_async_first_run())
 
         if self.hass.state == CoreState.running:
             _async_startup()

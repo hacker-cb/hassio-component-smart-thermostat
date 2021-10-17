@@ -75,6 +75,9 @@ class AbstractController(abc.ABC):
 
     @property
     @final
+    def mode(self) -> str:
+        return self._mode
+
     def _context(self) -> Context:
         return self._thermostat.get_context()
 

@@ -308,7 +308,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             _LOGGER.error("%s: %s - Start called but no PID params was set", self._thermostat_entity_id, self.name)
             return False
 
-        output_limits = self.__get_output_limits()
+        output_limits = self._get_output_limits()
 
         if not self.__validate_output_limits(output_limits):
             return False
@@ -360,7 +360,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                          )
             self._pid.setpoint = target_temp
 
-        output_limits = self.__get_output_limits()
+        output_limits = self._get_output_limits()
         if self._last_output_limits != output_limits:
             _LOGGER.info("%s: %s - Output limits were changed from %s to %s",
                          self._thermostat_entity_id,
@@ -411,8 +411,8 @@ class AbstractPidController(AbstractController, abc.ABC):
         else:
             return True
 
-    def __get_output_limits(self) -> (None, None):
-        output_limits = self._get_output_limits()
+    def _get_output_limits(self) -> (None, None):
+        output_limits = self._get_target_output_limits()
         min_temp, max_temp = output_limits
 
         # Override min/max values if provided in config
@@ -456,8 +456,8 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Turn off target"""
 
     @abc.abstractmethod
-    def _get_output_limits(self) -> (None, None):
-        """Get output limits (min,max)"""
+    def _get_target_output_limits(self) -> (None, None):
+        """Get output limits (min,max) in controller implementation"""
 
     @abc.abstractmethod
     async def _apply_output(self, output: float):
@@ -618,7 +618,7 @@ class NumberPidController(AbstractPidController):
     async def _async_turn_off(self):
         pass
 
-    def _get_output_limits(self):
+    def _get_target_output_limits(self):
         min_temp = None
         max_temp = None
 
@@ -679,7 +679,7 @@ class ClimatePidController(AbstractPidController):
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
-    def _get_output_limits(self) -> (None, None):
+    def _get_target_output_limits(self) -> (None, None):
         min_temp = None
         max_temp = None
 

@@ -356,6 +356,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         for controller in self._controllers:
             await controller.async_added_to_hass(self.hass, await self.async_get_last_state())
 
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, [controller.target_entity_id], self._async_controller_target_entity_changed
+                )
+            )
+
         if self._keep_alive:
             self.async_on_remove(
                 async_track_time_interval(
@@ -561,6 +567,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             return
 
         self._async_update_temp(new_state)
+        await self._async_control()
+        self.async_write_ha_state()
+
+    async def _async_controller_target_entity_changed(self, event):
+        """Handle controller target entity changes."""
+        _ = event
         await self._async_control()
         self.async_write_ha_state()
 

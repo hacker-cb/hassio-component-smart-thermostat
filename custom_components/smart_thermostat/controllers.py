@@ -12,10 +12,10 @@ from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SE
 from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
 from homeassistant.const import STATE_OFF
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
-from homeassistant.core import DOMAIN as HA_DOMAIN, callback, Event, HomeAssistant, Context, CALLBACK_TYPE, State
+from homeassistant.core import DOMAIN as HA_DOMAIN, HomeAssistant, Context, CALLBACK_TYPE, State
 from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.event import async_track_time_interval
 
 ATTR_PID_PARAMS = "pid_params"
 
@@ -105,26 +105,11 @@ class AbstractController(abc.ABC):
         """Will be called in Entity async_added_to_hass()"""
         self._hass = hass
 
-        self._thermostat.async_on_remove(
-            async_track_state_change_event(
-                self._hass, [self._target_entity_id], self._on_target_entity_state_changed
-            )
-        )
-
     def async_startup(self):
         """
         Startup method. Will ve called after HA core started
         """
         self._hass.create_task(self.async_control())
-
-    @callback
-    def _on_target_entity_state_changed(self, event: Event):
-        """On state changed callback"""
-        _ = event
-        self._hass.create_task(self.async_control())
-
-        # notify to handle correct current HVAC mode
-        self._thermostat.async_write_ha_state()
 
     @property
     def running(self):

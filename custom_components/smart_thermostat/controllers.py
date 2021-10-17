@@ -344,7 +344,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             sample_time=self._sample_period.total_seconds()
         )
 
-        temperature = self._round_to_target_precision(self._get_current_output())
+        temperature = self.__round_to_target_precision(self._get_current_output())
         if temperature:
             self._pid.set_auto_mode(enabled=True, last_output=temperature)
 
@@ -392,7 +392,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                          )
             self._pid.output_limits = output_limits
 
-        temperature = self._round_to_target_precision(self._get_current_output())
+        temperature = self.__round_to_target_precision(self._get_current_output())
 
         if self._last_output is not None and self._last_output != temperature:
             _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator",
@@ -403,7 +403,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                          )
             await self._async_start(cur_temp, target_temp)
 
-        output = self._round_to_target_precision(float(self._pid(cur_temp)))
+        output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
         if temperature != output:
             _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
@@ -428,7 +428,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             limits = (limits[0], self._target_max)
         return limits
 
-    def _round_to_target_precision(self, value: float) -> float:
+    def __round_to_target_precision(self, value: float) -> float:
         # FIXME: use target attr precision
         return round(value, 1)
 

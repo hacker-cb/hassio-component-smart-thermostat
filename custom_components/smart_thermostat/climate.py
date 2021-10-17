@@ -587,7 +587,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             debug_info = None
             _ = debug_info
 
-            if None not in (need_cool, need_heat):
+            if None not in (cur_temp, target_temp):
                 if cur_temp == target_temp:
                     pass
                 elif cur_temp > target_temp and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:

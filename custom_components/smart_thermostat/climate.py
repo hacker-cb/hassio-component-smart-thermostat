@@ -645,19 +645,35 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             # Stop all controllers which are not needed
             for controller in self._controllers:
-                if self._hvac_action != CURRENT_HVAC_COOL and controller.mode == HVAC_MODE_COOL and controller.running:
+                if (
+                        self._hvac_action != CURRENT_HVAC_COOL and
+                        controller.mode == HVAC_MODE_COOL and
+                        (controller.running or (controller.is_working and self._hvac_mode != HVAC_MODE_OFF))
+                ):
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, debug_info)
                     await controller.async_stop()
-                if self._hvac_action != CURRENT_HVAC_HEAT and controller.mode == HVAC_MODE_HEAT and controller.running:
+                if (
+                        self._hvac_action != CURRENT_HVAC_HEAT and
+                        controller.mode == HVAC_MODE_HEAT and
+                        (controller.running or (controller.is_working and self._hvac_mode != HVAC_MODE_OFF))
+                ):
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, debug_info)
                     await controller.async_stop()
 
             # Start all controllers which are needed
             for controller in self._controllers:
-                if self._hvac_action == CURRENT_HVAC_COOL and controller.mode == HVAC_MODE_COOL and not controller.running:
+                if (
+                        self._hvac_action == CURRENT_HVAC_COOL and
+                        controller.mode == HVAC_MODE_COOL and
+                        not controller.running
+                ):
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
                     await controller.async_start()
-                if self._hvac_action == CURRENT_HVAC_HEAT and controller.mode == HVAC_MODE_HEAT and not controller.running:
+                if (
+                        self._hvac_action == CURRENT_HVAC_HEAT and
+                        controller.mode == HVAC_MODE_HEAT and
+                        not controller.running
+                ):
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
                     await controller.async_start()
 

@@ -243,7 +243,6 @@ def _create_controllers(
                     entity_id
                 )
 
-
             controller = SwitchController(
                 name,
                 mode,
@@ -649,10 +648,10 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     async def _async_sensor_changed(self, event):
         """Handle temperature changes."""
         new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if new_state is None:
             return
 
-        self._async_update_temp(new_state)
+        self._async_update_temp(new_state.state)
         await self._async_control()
         self.async_write_ha_state()
 
@@ -663,14 +662,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self.async_write_ha_state()
 
     @callback
-    def _async_update_temp(self, state):
+    def _async_update_temp(self, temp):
         """Update thermostat with latest state from sensor."""
         try:
-            cur_temp = float(state.state)
-            if math.isnan(cur_temp) or math.isinf(cur_temp):
-                raise ValueError(f"Sensor has illegal state {state.state}")
-            self._cur_temp = cur_temp
+            self._cur_temp = float(temp)
+            if math.isnan(self._cur_temp) or math.isinf(self._cur_temp):
+                raise ValueError(f"Sensor has illegal value {temp}")
+
         except ValueError as ex:
+            self._cur_temp = None
             _LOGGER.error("%s: Unable to update from sensor: %s", self.name, ex)
 
     async def _async_control(self, time=None, force=False):

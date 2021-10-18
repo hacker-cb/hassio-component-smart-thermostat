@@ -446,7 +446,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         async def _async_first_run():
             """Will called one time. Need on hot reload when HA core is running"""
-            await self._async_control()
+            await self._async_control(reason="first_run")
             self.async_write_ha_state()
 
         @callback
@@ -614,7 +614,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         self._hvac_mode = hvac_mode
 
-        await self._async_control(force=True)
+        await self._async_control(force=True, reason="hvac_mode_change")
 
         # Ensure we update the current operation after changing the mode
         self.async_write_ha_state()
@@ -625,7 +625,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         if temperature is None:
             return
         self._target_temp = temperature
-        await self._async_control(force=True)
+        await self._async_control(force=True, reason="target_temp_changed")
         self.async_write_ha_state()
 
     @property
@@ -663,7 +663,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._sensor_stale_duration,
             )
 
-        await self._async_control()
+        await self._async_control(reason="sensor_changed")
         self.async_write_ha_state()
 
     @callback
@@ -681,7 +681,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     async def _async_controller_target_entity_changed(self, event):
         """Handle controller target entity changes."""
         _ = event
-        await self._async_control()
+        await self._async_control(reason="entity_changed")
         self.async_write_ha_state()
 
     @callback
@@ -700,7 +700,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             self._cur_temp = None
             _LOGGER.error("%s: Unable to update from sensor: %s", self.name, ex)
 
-    async def _async_control(self, time=None, force=False):
+    async def _async_control(self, time=None, force=False, reason=None):
         """Call controllers"""
         async with self._temp_lock:
             cur_temp = self._cur_temp
@@ -767,7 +767,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             # Call async_control() on running controllers
             for controller in self._controllers:
                 if controller.running:
-                    await controller.async_control(time=time, force=force)
+                    await controller.async_control(time=time, force=force, reason=reason)
 
     @property
     def supported_features(self):
@@ -783,14 +783,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         if preset_mode == self._attr_preset_mode:
             # I don't think we need to call async_write_ha_state if we didn't change the state
             return
+        reason = "preset_changed"
         if preset_mode == PRESET_AWAY:
             self._attr_preset_mode = PRESET_AWAY
             self._saved_target_temp = self._target_temp
             self._target_temp = self._away_temp
-            await self._async_control(force=True)
+            await self._async_control(force=True, reason=reason)
         elif preset_mode == PRESET_NONE:
             self._attr_preset_mode = PRESET_NONE
             self._target_temp = self._saved_target_temp
-            await self._async_control(force=True)
+            await self._async_control(force=True, reason=reason)
 
         self.async_write_ha_state()

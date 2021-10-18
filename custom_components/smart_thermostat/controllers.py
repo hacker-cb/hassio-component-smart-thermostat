@@ -167,7 +167,7 @@ class AbstractController(abc.ABC):
         """Stop controller implementation"""
 
     @final
-    async def async_control(self, time=None, force=False, keep_alive=False):
+    async def async_control(self, time=None, force=False, keep_alive=False, reason=None):
         """Callback which will be called from Climate Entity"""
         if not self.__running:
             return
@@ -175,17 +175,19 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        # _LOGGER.debug("%s: %s - Control: cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
-        #               self._thermostat_entity_id, self.name,
-        #               cur_temp, target_temp,
-        #               force, time, keep_alive
-        #               )
+        _LOGGER.debug("%s: %s - Control: reason: %s, cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
+                      self._thermostat_entity_id, self.name, reason,
+                      cur_temp, target_temp,
+                      force,
+                      True if time else False,
+                      keep_alive
+                      )
 
         await self._async_control(cur_temp, target_temp, time=time, force=force, keep_alive=keep_alive)
 
     @final
     async def __async_keep_alive(self, time=None):
-        await self.async_control(time=time, keep_alive=True)
+        await self.async_control(time=time, keep_alive=True, reason="keep_alive")
 
     @abc.abstractmethod
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
@@ -358,9 +360,13 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         self._thermostat.async_on_remove(
             async_track_time_interval(
-                self._hass, self.async_control, self._pid_sample_period
+                self._hass, self.__async_pid_control, self._pid_sample_period
             )
         )
+
+    @final
+    async def __async_pid_control(self, time=None):
+        await self.async_control(time=time, reason="pid_control")
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:

@@ -21,6 +21,9 @@ ATTR_PID_PARAMS = "pid_params"
 
 _LOGGER = logging.getLogger(__name__)
 
+REASON_KEEP_ALIVE = "keep_alive"
+REASON_PID_CONTROL = "pid_control"
+
 
 class Thermostat(abc.ABC):
     @abc.abstractmethod
@@ -167,7 +170,7 @@ class AbstractController(abc.ABC):
         """Stop controller implementation"""
 
     @final
-    async def async_control(self, time=None, force=False, keep_alive=False, reason=None):
+    async def async_control(self, time=None, force=False, reason=None):
         """Callback which will be called from Climate Entity"""
         if not self.__running:
             return
@@ -175,22 +178,22 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        _LOGGER.debug("%s: %s - Control: reason: %s, cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
-                      self._thermostat_entity_id, self.name, reason,
-                      cur_temp, target_temp,
-                      force,
-                      True if time else False,
-                      keep_alive
-                      )
+        # _LOGGER.debug("%s: %s - Control: reason: %s, cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
+        #               self._thermostat_entity_id, self.name, reason,
+        #               cur_temp, target_temp,
+        #               force,
+        #               True if time else False,
+        #               keep_alive
+        #               )
 
-        await self._async_control(cur_temp, target_temp, time=time, force=force, keep_alive=keep_alive)
+        await self._async_control(cur_temp, target_temp, time=time, force=force, reason=reason)
 
     @final
     async def __async_keep_alive(self, time=None):
-        await self.async_control(time=time, keep_alive=True, reason="keep_alive")
+        await self.async_control(time=time, reason=REASON_KEEP_ALIVE)
 
     @abc.abstractmethod
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         """Control method. Should be overwritten in child classes"""
 
 
@@ -248,10 +251,10 @@ class SwitchController(AbstractController):
     async def _async_stop(self):
         await self._async_turn_off(None)
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         # If the `force` argument is True, we
         # ignore `min_cycle_duration`.
-        if not force and keep_alive and self._min_cycle_duration:
+        if not force and reason == REASON_KEEP_ALIVE and self._min_cycle_duration:
             if self._is_on():
                 current_state = STATE_ON
             else:
@@ -283,15 +286,15 @@ class SwitchController(AbstractController):
 
         if self._is_on():
             if not need_turn_on:
-                await self._async_turn_off(reason="control")
-            elif keep_alive:
+                await self._async_turn_off(reason=reason)
+            elif reason == REASON_KEEP_ALIVE:
                 # The time argument is passed only in keep-alive case
-                await self._async_turn_on(reason="keep_alive")
+                await self._async_turn_on(reason=reason)
         else:
             if need_turn_on:
-                await self._async_turn_on(reason="control")
-            elif keep_alive:
-                await self._async_turn_off(reason="keep_alive")
+                await self._async_turn_on(reason=reason)
+            elif reason == REASON_KEEP_ALIVE:
+                await self._async_turn_off(reason=reason)
 
 
 class PidParams(abc.ABC):
@@ -366,7 +369,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @final
     async def __async_pid_control(self, time=None):
-        await self.async_control(time=time, reason="pid_control")
+        await self.async_control(time=time, reason=REASON_PID_CONTROL)
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
@@ -462,28 +465,26 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         return True
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID", self._thermostat_entity_id, self.name)
             return
 
-        if not self._is_on() or keep_alive:
-            await self._async_turn_on(
-                reason="keep_alive" if keep_alive else "control"
-            )
+        if not self._is_on() or reason == REASON_KEEP_ALIVE:
+            await self._async_turn_on(reason=reason)
 
         if self._pid.setpoint != target_temp:
-            _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
+            _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s (%s)",
                          self._thermostat_entity_id, self.name,
-                         self._pid.setpoint, target_temp
+                         self._pid.setpoint, target_temp, reason
                          )
             self._pid.setpoint = target_temp
 
         output_limits = self._get_output_limits()
         if self._last_output_limits != output_limits:
-            _LOGGER.info("%s: %s - Output limits were changed from %s to %s",
+            _LOGGER.info("%s: %s - Output limits were changed from %s to %s (%s)",
                          self._thermostat_entity_id, self.name,
-                         self._last_output_limits, output_limits
+                         self._last_output_limits, output_limits, reason
                          )
             if not self.__validate_output_limits(output_limits):
                 return
@@ -492,9 +493,9 @@ class AbstractPidController(AbstractController, abc.ABC):
         current_output = self.__round_to_target_precision(self._get_current_output())
 
         if self._last_output is not None and self._last_output != current_output:
-            _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator",
+            _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator (%s)",
                          self._thermostat_entity_id, self.name,
-                         self._last_output, current_output
+                         self._last_output, current_output, reason
                          )
             self._pid = None
             self._setup_pid(cur_temp, target_temp)
@@ -502,17 +503,19 @@ class AbstractPidController(AbstractController, abc.ABC):
         output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
         if current_output != output:
-            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s (control)",
+            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s, limits: %s (%s)",
                           self._thermostat_entity_id, self.name,
                           cur_temp, target_temp,
-                          current_output, output
+                          current_output, output,
+                          output_limits, reason
                           )
             await self._apply_output(output)
-        elif keep_alive:
-            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, setting %s (keep_alive)",
+        elif reason == REASON_KEEP_ALIVE:
+            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, setting %s. limits: (%s)",
                           self._thermostat_entity_id, self.name,
                           cur_temp, target_temp,
-                          output
+                          output,
+                          output_limits, reason
                           )
             await self._apply_output(output)
 

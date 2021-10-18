@@ -57,7 +57,7 @@ from .controllers import SwitchController, Thermostat, AbstractController, PidPa
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SWITCH_TOLERANCE = 0.3
-DEFAULT_GLOBAL_TOLERANCE = 0.2
+DEFAULT_HEAT_COOL_TOLERANCE = 0.2
 DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool mode and PID control support"
 DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
 DEFAULT_PID_KP = 1.0
@@ -74,6 +74,8 @@ CONF_TARGET_TEMP = "target_temp"
 CONF_MIN_DUR = "min_cycle_duration"
 CONF_COLD_TOLERANCE = "cold_tolerance"
 CONF_HOT_TOLERANCE = "hot_tolerance"
+CONF_HEAT_COOL_COLD_TOLERANCE = "heat_cool_cold_tolerance"
+CONF_HEAT_COOL_HOT_TOLERANCE = "heat_cool_hot_tolerance"
 CONF_KEEP_ALIVE = "keep_alive"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
@@ -182,8 +184,8 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_GLOBAL_TOLERANCE): cv.positive_float,
-        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_GLOBAL_TOLERANCE): cv.positive_float,
+        vol.Optional(CONF_HEAT_COOL_COLD_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
+        vol.Optional(CONF_HEAT_COOL_HOT_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
             [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
@@ -203,8 +205,8 @@ def _create_controllers(
         prefix: str,
         mode: str,
         conf_list,
-        global_cold_tolerance: float,
-        global_hot_tolerance: float
+        heat_cool_cold_tolerance: float,
+        heat_cool_hot_tolerance: float
 ) -> [AbstractController]:
     if not isinstance(conf_list, list):
         conf_list = [conf_list]
@@ -226,22 +228,22 @@ def _create_controllers(
             cold_tolerance = conf[CONF_COLD_TOLERANCE]
             hot_tolerance = conf[CONF_HOT_TOLERANCE]
 
-            if cold_tolerance < global_cold_tolerance:
+            if cold_tolerance < heat_cool_cold_tolerance:
                 _LOGGER.warning(
-                    "Cold tolerance (%s) < global hot tolerance (%s) "
-                    "for '%s' entity_id: %s. Switch will use global cold tolerance.",
+                    "cold_tolerance (%s) < heat_cool_cold_tolerance (%s). "
+                    "%s will be enabled in heat/cool mode based on heat_cool_cold_tolerance (entity_id: %s).",
                     cold_tolerance,
-                    global_cold_tolerance,
+                    heat_cool_cold_tolerance,
                     name,
                     entity_id
                 )
 
-            if hot_tolerance < global_hot_tolerance:
+            if hot_tolerance < heat_cool_hot_tolerance:
                 _LOGGER.warning(
-                    "Hot tolerance (%s) < global hot tolerance (%s) "
-                    "for '%s' entity_id: %s. Switch will use global hot tolerance.",
+                    "hot_tolerance (%s) < heat_cool_hot_tolerance (%s). "
+                    "%s will be enabled in heat/cool mode based on heat_cool_hot_tolerance (entity_id: %s).",
                     hot_tolerance,
-                    global_hot_tolerance,
+                    heat_cool_hot_tolerance,
                     name,
                     entity_id
                 )
@@ -311,8 +313,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
     target_temp = config.get(CONF_TARGET_TEMP)
-    cold_tolerance = config.get(CONF_COLD_TOLERANCE)
-    hot_tolerance = config.get(CONF_HOT_TOLERANCE)
+    heat_cool_cold_tolerance = config.get(CONF_COLD_TOLERANCE)
+    heat_cool_hot_tolerance = config.get(CONF_HOT_TOLERANCE)
     keep_alive = config.get(CONF_KEEP_ALIVE)
     initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE)
     away_temp = config.get(CONF_AWAY_TEMP)
@@ -327,16 +329,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         'cooler',
         HVAC_MODE_COOL,
         cooler_config,
-        cold_tolerance,
-        hot_tolerance
+        heat_cool_cold_tolerance,
+        heat_cool_hot_tolerance
     ) if cooler_config else None
 
     heaters = _create_controllers(
         'heater',
         HVAC_MODE_HEAT,
         heater_config,
-        cold_tolerance,
-        hot_tolerance
+        heat_cool_cold_tolerance,
+        heat_cool_hot_tolerance
     ) if heater_config else None
 
     async_add_entities(
@@ -349,8 +351,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 min_temp,
                 max_temp,
                 target_temp,
-                cold_tolerance,
-                hot_tolerance,
+                heat_cool_cold_tolerance,
+                heat_cool_hot_tolerance,
                 keep_alive,
                 initial_hvac_mode,
                 away_temp,
@@ -375,8 +377,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             min_temp,
             max_temp,
             target_temp,
-            cold_tolerance,
-            hot_tolerance,
+            heat_cool_cold_tolerance,
+            heat_cool_hot_tolerance,
             keep_alive,
             initial_hvac_mode,
             away_temp,
@@ -399,8 +401,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._max_temp = max_temp
         self._attr_preset_mode = PRESET_NONE
         self._target_temp = target_temp
-        self._cold_tolerance = cold_tolerance
-        self._hot_tolerance = hot_tolerance
+        self._heat_cool_cold_tolerance = heat_cool_cold_tolerance
+        self._heat_cool_hot_tolerance = heat_cool_hot_tolerance
         self._unit = unit
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
@@ -716,14 +718,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             if None not in (cur_temp, target_temp):
 
-                too_cold = cur_temp <= target_temp - self._cold_tolerance
-                too_hot = cur_temp >= target_temp + self._hot_tolerance
+                too_cold = cur_temp <= target_temp - self._heat_cool_cold_tolerance
+                too_hot = cur_temp >= target_temp + self._heat_cool_hot_tolerance
 
-                if cur_temp == target_temp:
-                    pass
-                elif too_hot and self._hvac_mode in [HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL]:
+                if self._hvac_mode == HVAC_MODE_COOL or self._hvac_mode == HVAC_MODE_HEAT_COOL and too_hot:
                     new_hvac_action = CURRENT_HVAC_COOL
-                elif too_cold and self._hvac_mode in [HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL]:
+                elif self._hvac_mode == HVAC_MODE_HEAT or self._hvac_mode == HVAC_MODE_HEAT_COOL and too_cold:
                     new_hvac_action = CURRENT_HVAC_HEAT
                 debug_info = f"hvac_action: {new_hvac_action}, (cur: {cur_temp}, target: {target_temp})"
             else:

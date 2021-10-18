@@ -487,7 +487,7 @@ class SwitchController(AbstractController):
         return self._is_on()
 
     async def _async_turn_on(self, reason):
-        _LOGGER.info("%s: %s - Turning on %s (%s)",
+        _LOGGER.info("%s: %s - Turning on switch %s (%s)",
                      self._thermostat_entity_id,
                      self.name, self._target_entity_id, reason)
 
@@ -497,7 +497,7 @@ class SwitchController(AbstractController):
         }, context=self._context)
 
     async def _async_turn_off(self, reason):
-        _LOGGER.info("%s: %s - Turning off %s (%s)",
+        _LOGGER.info("%s: %s - Turning off switch %s (%s)",
                      self._thermostat_entity_id,
                      self.name, self._target_entity_id, reason)
 
@@ -603,7 +603,7 @@ class NumberPidController(AbstractPidController):
 
     async def _async_turn_on(self, reason=None):
         _LOGGER.info("%s: %s - Turning on switch %s (%s)",
-                     self._thermostat_entity_id,
+                     self._switch_entity_id,
                      self.name, self._switch_entity_id, reason)
 
         service = SERVICE_TURN_ON if not self._switch_inverted else SERVICE_TURN_OFF
@@ -613,7 +613,7 @@ class NumberPidController(AbstractPidController):
 
     async def _async_turn_off(self, reason):
         _LOGGER.info("%s: %s - Turning off switch %s (%s)",
-                     self._thermostat_entity_id,
+                     self._switch_entity_id,
                      self.name, self._switch_entity_id, reason)
 
         service = SERVICE_TURN_OFF if not self._switch_inverted else SERVICE_TURN_ON
@@ -649,7 +649,7 @@ class NumberPidController(AbstractPidController):
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         if not self._is_on():
             await self._async_turn_on(reason="control")
-        elif not self._is_on():
+        elif keep_alive:
             await self._async_turn_on(reason="keep_alive")
 
         await super()._async_control(cur_temp, target_temp, time, force)
@@ -681,6 +681,13 @@ class ClimatePidController(AbstractPidController):
         hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
         return hvac_action not in (CURRENT_HVAC_IDLE, CURRENT_HVAC_OFF)
 
+    def _is_on(self):
+        state: State = self._hass.states.get(self._target_entity_id)
+        if not state:
+            return False
+        hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
+        return hvac_action not in (CURRENT_HVAC_OFF,)
+
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)
         if state:
@@ -688,11 +695,19 @@ class ClimatePidController(AbstractPidController):
         return None
 
     async def _async_turn_on(self, reason=None):
+        _LOGGER.info("%s: %s - Turning on climate %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_ON, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
     async def _async_turn_off(self, reason):
+        _LOGGER.info("%s: %s - Turning off climate %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_OFF, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
@@ -717,6 +732,13 @@ class ClimatePidController(AbstractPidController):
         )
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
+        # Check is on
+        if not self._is_on():
+            await self._async_turn_on(reason="control")
+        elif keep_alive:
+            await self._async_turn_on(reason="keep_alive")
+
+        # Set HVAC mode
         state: State = self._hass.states.get(self._target_entity_id)
         if state:
             old_hvac_mode = state.state

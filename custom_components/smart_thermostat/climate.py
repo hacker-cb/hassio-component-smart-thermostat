@@ -687,6 +687,10 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     @callback
     async def _async_update_temp(self, temp):
         """Update thermostat with latest state from sensor."""
+        if temp in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self._cur_temp = None
+            return
+
         try:
             self._cur_temp = float(temp)
             if math.isnan(self._cur_temp) or math.isinf(self._cur_temp):

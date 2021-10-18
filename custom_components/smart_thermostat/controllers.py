@@ -352,10 +352,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         return True
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
-        if not self._pid:
-            _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
-            return False
-
         too_cold = cur_temp < target_temp
         too_hot = cur_temp > target_temp
 

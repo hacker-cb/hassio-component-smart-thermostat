@@ -730,8 +730,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 debug_info = f"current/target not available (cur: {cur_temp}, target: {target_temp})"
 
             if self._hvac_action != new_hvac_action:
-                _LOGGER.debug("%s: Changed HVAC action from %s to %s",
-                              self.entity_id, self._hvac_action, new_hvac_action)
+                _LOGGER.info("%s: Changed HVAC action from %s to %s (cur: %s, target: %s, mode: %s)",
+                             self.entity_id, self._hvac_action, new_hvac_action, cur_temp, target_temp, self._hvac_mode)
                 self._hvac_action = new_hvac_action
 
             # Stop all controllers which are not needed

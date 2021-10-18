@@ -169,12 +169,12 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        _LOGGER.debug("%s: %s - Control: cur: %s, target: %s",
-                      self._thermostat_entity_id,
-                      self.name,
-                      cur_temp,
-                      target_temp
-                      )
+        # _LOGGER.debug("%s: %s - Control: cur: %s, target: %s",
+        #               self._thermostat_entity_id,
+        #               self.name,
+        #               cur_temp,
+        #               target_temp
+        #               )
 
         await self._async_control(cur_temp, target_temp, time=time, force=force)
 

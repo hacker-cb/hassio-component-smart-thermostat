@@ -214,16 +214,16 @@ class AbstractPidController(AbstractController, abc.ABC):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
+            pid_sample_period: timedelta,
             inverted: bool,
             keep_alive: Optional[timedelta],
-            sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id, inverted, keep_alive)
         self._initial_pid_params = pid_params
         self._current_pid_params: Optional[PidParams] = None
-        self._sample_period = sample_period
+        self._pid_sample_period = pid_sample_period
         self._target_min = target_min
         self._target_max = target_max
         self._pid: Optional[PID] = None
@@ -258,7 +258,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         self._thermostat.async_on_remove(
             async_track_time_interval(
-                self._hass, self.async_control, self._sample_period
+                self._hass, self.async_control, self._pid_sample_period
             )
         )
 
@@ -332,7 +332,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             setpoint=target_temp,
             output_limits=output_limits,
             auto_mode=False,
-            sample_time=self._sample_period.total_seconds()
+            sample_time=self._pid_sample_period.total_seconds()
         )
 
         current_output = self.__round_to_target_precision(self._get_current_output())
@@ -603,17 +603,17 @@ class NumberPidController(AbstractPidController):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
+            pid_sample_period: timedelta,
             inverted: bool,
             keep_alive: Optional[timedelta],
-            sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float],
             switch_entity_id: str,
             switch_inverted: bool
     ):
         super().__init__(name, mode, target_entity_id,
-                         pid_params, inverted, keep_alive,
-                         sample_period,
+                         pid_params, pid_sample_period,
+                         inverted, keep_alive,
                          target_min, target_max)
         self._switch_entity_id = switch_entity_id
         self._switch_inverted = switch_inverted
@@ -683,15 +683,15 @@ class ClimatePidController(AbstractPidController):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
+            pid_sample_period: timedelta,
             inverted: bool,
             keep_alive: Optional[timedelta],
-            sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id,
-                         pid_params, inverted, keep_alive,
-                         sample_period,
+                         pid_params, pid_sample_period,
+                         inverted, keep_alive,
                          target_min, target_max)
 
     @property

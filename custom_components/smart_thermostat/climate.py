@@ -267,9 +267,9 @@ def _create_controllers(
                 mode,
                 entity_id,
                 PidParams(pid_params[0], pid_params[1], pid_params[2]),
+                conf[CONF_PID_SAMPLE_PERIOD],
                 inverted,
                 keep_alive,
-                conf[CONF_PID_SAMPLE_PERIOD],
                 conf[CONF_PID_MIN],
                 conf[CONF_PID_MAX],
                 conf[CONF_PID_SWITCH_ENTITY_ID],
@@ -285,9 +285,9 @@ def _create_controllers(
                 mode,
                 entity_id,
                 PidParams(pid_params[0], pid_params[1], pid_params[2]),
+                conf[CONF_PID_SAMPLE_PERIOD],
                 inverted,
                 keep_alive,
-                conf[CONF_PID_SAMPLE_PERIOD],
                 conf[CONF_PID_MIN],
                 conf[CONF_PID_MAX]
             )

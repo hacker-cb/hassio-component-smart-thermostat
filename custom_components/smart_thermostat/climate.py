@@ -717,13 +717,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 too_cold = cur_temp <= target_temp - self._heat_cool_cold_tolerance
                 too_hot = cur_temp >= target_temp + self._heat_cool_hot_tolerance
 
-                if self._hvac_mode == HVAC_MODE_COOL or self._hvac_mode == HVAC_MODE_HEAT_COOL and too_hot:
+                if self._hvac_mode in (HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL) and too_hot:
                     new_hvac_action = CURRENT_HVAC_COOL
-                elif self._hvac_mode == HVAC_MODE_HEAT or self._hvac_mode == HVAC_MODE_HEAT_COOL and too_cold:
+                elif self._hvac_mode in (HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL) and too_cold:
                     new_hvac_action = CURRENT_HVAC_HEAT
                 debug_info = f"hvac_action: {new_hvac_action}, (cur: {cur_temp}, target: {target_temp})"
             else:
                 debug_info = f"current/target not available (cur: {cur_temp}, target: {target_temp})"
+
+            # _LOGGER.debug("%s: HVAC old: %s, new: %s (%s): %s", self.entity_id, self._hvac_action, new_hvac_action, reason, debug_info)
 
             if self._hvac_action != new_hvac_action:
                 _LOGGER.info("%s: Changed HVAC action from %s to %s (cur: %s, target: %s, mode: %s)",
@@ -733,6 +735,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             # Stop all controllers which are not needed
             for controller in self._controllers:
                 controller_debug_info = f"{debug_info}, running: {controller.running}, working: {controller.working}"
+
+                # _LOGGER.debug("%s: Check for stop %s, %s", self.entity_id, controller.name, controller_debug_info)
+
                 if (
                         self._hvac_action != CURRENT_HVAC_COOL and
                         controller.mode == HVAC_MODE_COOL and
@@ -750,19 +755,23 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             # Start all controllers which are needed
             for controller in self._controllers:
+                controller_debug_info = f"{debug_info}, running: {controller.running}, working: {controller.working}"
+
+                # _LOGGER.debug("%s: Check for start %s, %s", self.entity_id, controller.name, controller_debug_info)
+
                 if (
                         self._hvac_action == CURRENT_HVAC_COOL and
                         controller.mode == HVAC_MODE_COOL and
                         not controller.running
                 ):
-                    _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
+                    _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, controller_debug_info)
                     await controller.async_start()
                 if (
                         self._hvac_action == CURRENT_HVAC_HEAT and
                         controller.mode == HVAC_MODE_HEAT and
                         not controller.running
                 ):
-                    _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, debug_info)
+                    _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, controller_debug_info)
                     await controller.async_start()
 
             # Call async_control() on running controllers

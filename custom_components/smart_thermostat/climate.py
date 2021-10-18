@@ -94,8 +94,7 @@ def _cv_pid_params_list(value: Any) -> list:
     value = cv.ensure_list_csv(value)
     if len(value) != 3:
         raise vol.Invalid(f"{CONF_PID_PARAMS} should be 3 items: kp, ki, kd")
-    value = [float(v) for v in value]
-    return value
+    return [cv.positive_float(v) for v in value]
 
 
 def _cv_min_max_check(cfg):

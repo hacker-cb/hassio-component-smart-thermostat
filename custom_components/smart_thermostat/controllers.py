@@ -268,13 +268,13 @@ class AbstractPidController(AbstractController, abc.ABC):
         if not pid_params:
             raise ValueError(f"PID params can't be None")
 
-        if self._mode == HVAC_MODE_COOL and not pid_params.kp < 0:
+        if self._mode == HVAC_MODE_COOL:
             pid_params.invert()
-            _LOGGER.warning("%s: %s - Cooler mode but kp not negative. Inverting all PID params: %s",
-                            self._thermostat_entity_id,
-                            self.name,
-                            pid_params
-                            )
+            _LOGGER.info("%s: %s - Cooler mode. Inverting all PID params: %s",
+                         self._thermostat_entity_id,
+                         self.name,
+                         pid_params
+                         )
         if self._inverted:
             pid_params.invert()
             _LOGGER.info("%s: %s - Target behavior inverted requested in config. Inverting all PID params: %s",

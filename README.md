@@ -17,12 +17,13 @@ Thermostat was designed to control different kind of entities (not only switchab
 
 ## Installation (Manual)
 
-Copy `/custom_components/smart_thermostat` to your `<config_dir>/custom_components/` directory.
+1. Copy `/custom_components/smart_thermostat` to your `<config_dir>/custom_components/` directory.
 
-_NOTE: You will need to create the `custom_components` folder if it does not exist._
+   * On HassIO the final location will be `/config/custom_components/smart_thermostat`.
+   * On Supervised the final location will be `/usr/share/hassio/homeassistant/custom_components/smart_thermostat`.
+   * _NOTE: You will need to create the `custom_components` folder if it does not exist._
 
-* On HassIO the final location will be `/config/custom_components/smart_thermostat`.
-* On Supervised the final location will be `/usr/share/hassio/homeassistant/custom_components/smart_thermostat`.
+1. Restart Home Assistant Core.
 
 ## Minimal working config example
 ```yaml
@@ -117,7 +118,8 @@ Domains: `switch`,`input_boolean`
 #### Config options
 
 * `entity_id` _(Required)_ - Target entity ID.
-* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic
+* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
+* `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `min_cycle_duration` _(Optional, default=null)_ - Minimal cycle duration. Used to protect from on/off cycling.
 * `cold_tolerance` _(Optional, default=0.3)_ - Cold tolerance.
 * `hot_tolerance` _(Optional, default=0.3)_ - Hot tolerance.
@@ -135,7 +137,8 @@ Domains: `climate`
 #### Config options
 
 * `entity_id` _(Required)_ - Target entity ID.
-* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic
+* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
+* `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
 * `pid_sample_period` _(Optional, default="00:10:00")_ - PID sample time period.
 * `min` _(Optional)_ - Minimum temperature which can be set. Attribute `min_temp` from `entity_id` will be used if not specified.
@@ -155,7 +158,8 @@ Domains: `number`,`input_number`
 #### Config options
 
 * `entity_id` _(Required)_ - Target entity ID.
-* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic 
+* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
+* `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
 * `pid_sample_period` _(Optional, default="00:10:00")_ - PID sample time period.
 * `min` _(Optional)_ - Minimum temperature which can be set. Attribute `min` from `entity_id` will be used if not specified.

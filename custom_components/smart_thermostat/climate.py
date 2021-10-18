@@ -109,7 +109,8 @@ def _cv_min_max_check(cfg):
 
 TARGET_SCHEMA_COMMON = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_domain(SUPPORTED_TARGET_DOMAINS),
-    vol.Optional(CONF_INVERTED, default=False): bool
+    vol.Optional(CONF_INVERTED, default=False): bool,
+    vol.Optional(CONF_KEEP_ALIVE, default=None): vol.Any(None, cv.positive_time_period)
 })
 
 TARGET_SCHEMA_SWITCH = TARGET_SCHEMA_COMMON.extend({
@@ -186,7 +187,6 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
         vol.Optional(CONF_HEAT_COOL_COLD_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_HEAT_COOL_HOT_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
-        vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
             [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
         ),
@@ -218,6 +218,7 @@ def _create_controllers(
 
         entity_id = conf[CONF_ENTITY_ID]
         inverted = conf[CONF_INVERTED]
+        keep_alive = conf[CONF_KEEP_ALIVE]
 
         domain = split_entity_id(entity_id)[0]
 
@@ -253,6 +254,7 @@ def _create_controllers(
                 cold_tolerance,
                 hot_tolerance,
                 inverted,
+                keep_alive,
                 min_duration
             )
             controllers.append(controller)
@@ -266,6 +268,7 @@ def _create_controllers(
                 entity_id,
                 PidParams(pid_params[0], pid_params[1], pid_params[2]),
                 inverted,
+                keep_alive,
                 conf[CONF_PID_SAMPLE_PERIOD],
                 conf[CONF_PID_MIN],
                 conf[CONF_PID_MAX],
@@ -283,6 +286,7 @@ def _create_controllers(
                 entity_id,
                 PidParams(pid_params[0], pid_params[1], pid_params[2]),
                 inverted,
+                keep_alive,
                 conf[CONF_PID_SAMPLE_PERIOD],
                 conf[CONF_PID_MIN],
                 conf[CONF_PID_MAX]
@@ -313,7 +317,6 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     target_temp = config.get(CONF_TARGET_TEMP)
     heat_cool_cold_tolerance = config.get(CONF_HEAT_COOL_COLD_TOLERANCE)
     heat_cool_hot_tolerance = config.get(CONF_HEAT_COOL_HOT_TOLERANCE)
-    keep_alive = config.get(CONF_KEEP_ALIVE)
     initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE)
     away_temp = config.get(CONF_AWAY_TEMP)
     precision = config.get(CONF_PRECISION)
@@ -351,7 +354,6 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 target_temp,
                 heat_cool_cold_tolerance,
                 heat_cool_hot_tolerance,
-                keep_alive,
                 initial_hvac_mode,
                 away_temp,
                 precision,
@@ -377,7 +379,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             target_temp,
             heat_cool_cold_tolerance,
             heat_cool_hot_tolerance,
-            keep_alive,
             initial_hvac_mode,
             away_temp,
             precision,
@@ -388,7 +389,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._name = name
         self._controllers = controllers
         self.sensor_entity_id = sensor_entity_id
-        self._keep_alive = keep_alive
         self._hvac_mode = initial_hvac_mode
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
@@ -441,13 +441,6 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             self.async_on_remove(
                 async_track_state_change_event(
                     self.hass, controller.get_used_entity_ids(), self._async_controller_target_entity_changed
-                )
-            )
-
-        if self._keep_alive:
-            self.async_on_remove(
-                async_track_time_interval(
-                    self.hass, self._async_control, self._keep_alive
                 )
             )
 

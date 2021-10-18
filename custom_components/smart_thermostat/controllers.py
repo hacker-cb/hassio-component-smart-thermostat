@@ -58,13 +58,15 @@ class AbstractController(abc.ABC):
             name: str,
             mode: str,
             target_entity_id: str,
-            inverted: bool
+            inverted: bool,
+            keep_alive: Optional[timedelta]
     ):
         self._thermostat: Optional[Thermostat] = None
         self.name = name
         self._mode = mode
         self._target_entity_id = target_entity_id
         self._inverted = inverted
+        self._keep_alive = keep_alive
         self.__running = False
         self._hass: Optional[HomeAssistant] = None
         if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
@@ -95,6 +97,19 @@ class AbstractController(abc.ABC):
         """Will be called in Entity async_added_to_hass()"""
         self._hass = hass
 
+        if self._keep_alive:
+            _LOGGER.info(
+                "%s: %s - Setting up keep_alive: %s",
+                self._thermostat_entity_id,
+                self.name,
+                self._keep_alive,
+            )
+            self._thermostat.async_on_remove(
+                async_track_time_interval(
+                    self._hass, self.__async_keep_alive, self._keep_alive
+                )
+            )
+
     @property
     def running(self):
         return self.__running
@@ -114,32 +129,23 @@ class AbstractController(abc.ABC):
         target_temp = self._thermostat.get_target_temperature()
 
         _LOGGER.debug(
-            "%s: %s - Trying to start controller, cur: %, target: %s "
-            "Activated",
-            self._thermostat_entity_id,
-            self.name,
-            cur_temp,
-            target_temp,
+            "%s: %s - Trying to start controller, cur: %s, target: %s ",
+            self._thermostat_entity_id, self.name,
+            cur_temp, target_temp
         )
 
         if await self._async_start(cur_temp, target_temp):
-            _LOGGER.debug(
-                "%s: %s - Started controller, cur: %, target: %s "
-                "Activated",
-                self._thermostat_entity_id,
-                self.name,
-                cur_temp,
-                target_temp,
-            )
             self.__running = True
+            _LOGGER.debug(
+                "%s: %s - Started controller, cur: %s, target: %s ",
+                self._thermostat_entity_id, self.name,
+                cur_temp, target_temp
+            )
         else:
             _LOGGER.error(
-                "%s: %s - Error starting controller, cur: %, target: %s "
-                "Activated",
-                self._thermostat_entity_id,
-                self.name,
-                cur_temp,
-                target_temp,
+                "%s: %s - Error starting controller, cur: %s, target: %s ",
+                self._thermostat_entity_id, self.name,
+                cur_temp, target_temp
             )
 
     @final
@@ -161,7 +167,7 @@ class AbstractController(abc.ABC):
         """Stop controller implementation"""
 
     @final
-    async def async_control(self, time=None, force=False):
+    async def async_control(self, time=None, force=False, keep_alive=False):
         """Callback which will be called from Climate Entity"""
         if not self.__running:
             return
@@ -169,17 +175,20 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        # _LOGGER.debug("%s: %s - Control: cur: %s, target: %s",
-        #               self._thermostat_entity_id,
-        #               self.name,
-        #               cur_temp,
-        #               target_temp
+        # _LOGGER.debug("%s: %s - Control: cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
+        #               self._thermostat_entity_id, self.name,
+        #               cur_temp, target_temp,
+        #               force, time, keep_alive
         #               )
 
-        await self._async_control(cur_temp, target_temp, time=time, force=force)
+        await self._async_control(cur_temp, target_temp, time=time, force=force, keep_alive=keep_alive)
+
+    @final
+    async def __async_keep_alive(self, time=None):
+        await self.async_control(time=time, keep_alive=True)
 
     @abc.abstractmethod
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         """Control method. Should be overwritten in child classes"""
 
 
@@ -206,11 +215,12 @@ class AbstractPidController(AbstractController, abc.ABC):
             target_entity_id: str,
             pid_params: PidParams,
             inverted: bool,
+            keep_alive: Optional[timedelta],
             sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float]
     ):
-        super().__init__(name, mode, target_entity_id, inverted)
+        super().__init__(name, mode, target_entity_id, inverted, keep_alive)
         self._initial_pid_params = pid_params
         self._current_pid_params: Optional[PidParams] = None
         self._sample_period = sample_period
@@ -324,13 +334,11 @@ class AbstractPidController(AbstractController, abc.ABC):
         else:
             self._pid.set_auto_mode(enabled=True)
 
-        _LOGGER.info("%s: %s - Initialized.  PID params: %s, temperature: %s, limits: %s",
-                     self._thermostat_entity_id,
-                     self.name,
-                     pid_params,
-                     current_output,
-                     output_limits
-                     )
+        _LOGGER.debug("%s: %s - PID params: %s, current_output: %s, limits: %s",
+                      self._thermostat_entity_id, self.name,
+                      pid_params,
+                      current_output, output_limits
+                      )
 
         await self._async_turn_on()
 
@@ -340,11 +348,11 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @final
     async def _async_stop(self):
-        await self._async_turn_off()
+        await self._async_turn_off(None)
         self._pid = None
         pass
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
             return False
@@ -379,7 +387,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                          self._last_output,
                          temperature
                          )
-            await self._async_start(cur_temp, target_temp)
+            await self.async_start()
 
         output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
@@ -392,6 +400,9 @@ class AbstractPidController(AbstractController, abc.ABC):
                           temperature,
                           output
                           )
+            await self._apply_output(output)
+        elif keep_alive:
+            _LOGGER.debug("%s: %s - Keep-alive %s", self._thermostat_entity_id, self.name, output)
             await self._apply_output(output)
 
         self._last_output = output
@@ -446,11 +457,11 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Get current output"""
 
     @abc.abstractmethod
-    async def _async_turn_on(self):
+    async def _async_turn_on(self, reason=None):
         """Turn on target"""
 
     @abc.abstractmethod
-    async def _async_turn_off(self):
+    async def _async_turn_off(self, reason):
         """Turn off target"""
 
     @abc.abstractmethod
@@ -472,9 +483,10 @@ class SwitchController(AbstractController):
             cold_tolerance: float,
             hot_tolerance: float,
             inverted: bool,
+            keep_alive: Optional[timedelta],
             min_cycle_duration
     ):
-        super().__init__(name, mode, target_entity_id, inverted)
+        super().__init__(name, mode, target_entity_id, inverted, keep_alive)
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
         self._min_cycle_duration = min_cycle_duration
@@ -483,15 +495,21 @@ class SwitchController(AbstractController):
     def working(self):
         return self._is_on()
 
-    async def _async_turn_on(self):
-        """Turn toggleable device on."""
+    async def _async_turn_on(self, reason):
+        _LOGGER.info("%s: %s - Turning on %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
         service = SERVICE_TURN_ON if not self._inverted else SERVICE_TURN_OFF
         await self._hass.services.async_call(HA_DOMAIN, service, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
-    async def _async_turn_off(self):
-        """Turn toggleable device off."""
+    async def _async_turn_off(self, reason):
+        _LOGGER.info("%s: %s - Turning off %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
         service = SERVICE_TURN_OFF if not self._inverted else SERVICE_TURN_ON
         await self._hass.services.async_call(HA_DOMAIN, service, {
             ATTR_ENTITY_ID: self._target_entity_id
@@ -507,14 +525,12 @@ class SwitchController(AbstractController):
         return True
 
     async def _async_stop(self):
-        await self._async_turn_off()
+        await self._async_turn_off(None)
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         # If the `force` argument is True, we
         # ignore `min_cycle_duration`.
-        # If the `time` argument is not none, we were invoked for
-        # keep-alive purposes, and `min_cycle_duration` is irrelevant.
-        if not force and time is None and self._min_cycle_duration:
+        if not force and keep_alive and self._min_cycle_duration:
             if self._is_on():
                 current_state = STATE_ON
             else:
@@ -550,30 +566,15 @@ class SwitchController(AbstractController):
 
         if self._is_on():
             if not need_turn_on:
-                _LOGGER.info("%s: %s - Turning off %s",
-                             self._thermostat_entity_id,
-                             self.name, self._target_entity_id)
-                await self._async_turn_off()
-            elif time is not None:
+                await self._async_turn_off(reason="control")
+            elif keep_alive:
                 # The time argument is passed only in keep-alive case
-                _LOGGER.info("%s: %s - Keep-alive - Turning on %s",
-                             self._thermostat_entity_id,
-                             self.name, self._target_entity_id)
-                await self._async_turn_on()
+                await self._async_turn_on(reason="keep_alive")
         else:
             if need_turn_on:
-                _LOGGER.info("%s: %s - Turning on %s",
-                             self._thermostat_entity_id,
-                             self.name, self._target_entity_id)
-                await self._async_turn_on()
-            elif time is not None:
-                # The time argument is passed only in keep-alive case
-                _LOGGER.info(
-                    "%s: %s - Keep-alive - Turning off %s",
-                    self._thermostat_entity_id,
-                    self.name, self._target_entity_id
-                )
-                await self._async_turn_off()
+                await self._async_turn_on(reason="control")
+            elif keep_alive:
+                await self._async_turn_off(reason="keep_alive")
 
 
 class NumberPidController(AbstractPidController):
@@ -584,6 +585,7 @@ class NumberPidController(AbstractPidController):
             target_entity_id: str,
             pid_params: PidParams,
             inverted: bool,
+            keep_alive: Optional[timedelta],
             sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float],
@@ -591,7 +593,7 @@ class NumberPidController(AbstractPidController):
             switch_inverted: bool
     ):
         super().__init__(name, mode, target_entity_id,
-                         pid_params, inverted,
+                         pid_params, inverted, keep_alive,
                          sample_period,
                          target_min, target_max)
         self._switch_entity_id = switch_entity_id
@@ -612,20 +614,20 @@ class NumberPidController(AbstractPidController):
             STATE_ON if not self._switch_inverted else STATE_OFF
         )
 
-    async def _async_turn_on(self):
-        _LOGGER.debug("%s: %s - Turning on switch %s",
-                      self._thermostat_entity_id,
-                      self.name, self._switch_entity_id)
+    async def _async_turn_on(self, reason=None):
+        _LOGGER.info("%s: %s - Turning on switch %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._switch_entity_id, reason)
 
         service = SERVICE_TURN_ON if not self._switch_inverted else SERVICE_TURN_OFF
         await self._hass.services.async_call(HA_DOMAIN, service, {
             ATTR_ENTITY_ID: self._switch_entity_id
         }, context=self._context)
 
-    async def _async_turn_off(self):
-        _LOGGER.debug("%s: %s - Turning off switch %s",
-                      self._thermostat_entity_id,
-                      self.name, self._switch_entity_id)
+    async def _async_turn_off(self, reason):
+        _LOGGER.info("%s: %s - Turning off switch %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._switch_entity_id, reason)
 
         service = SERVICE_TURN_OFF if not self._switch_inverted else SERVICE_TURN_ON
         await self._hass.services.async_call(HA_DOMAIN, service, {
@@ -657,9 +659,11 @@ class NumberPidController(AbstractPidController):
             }, context=self._context
         )
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         if not self._is_on():
-            await self._async_turn_on()
+            await self._async_turn_on(reason="control")
+        elif not self._is_on():
+            await self._async_turn_on(reason="keep_alive")
 
         await super()._async_control(cur_temp, target_temp, time, force)
 
@@ -672,12 +676,13 @@ class ClimatePidController(AbstractPidController):
             target_entity_id: str,
             pid_params: PidParams,
             inverted: bool,
+            keep_alive: Optional[timedelta],
             sample_period: timedelta,
             target_min: Optional[float],
             target_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id,
-                         pid_params, inverted,
+                         pid_params, inverted, keep_alive,
                          sample_period,
                          target_min, target_max)
 
@@ -695,12 +700,12 @@ class ClimatePidController(AbstractPidController):
             return float(state.attributes.get(ATTR_TEMPERATURE))
         return None
 
-    async def _async_turn_on(self):
+    async def _async_turn_on(self, reason=None):
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_ON, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
-    async def _async_turn_off(self):
+    async def _async_turn_off(self, reason):
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_OFF, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
@@ -724,22 +729,25 @@ class ClimatePidController(AbstractPidController):
             }, context=self._context
         )
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False):
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         state: State = self._hass.states.get(self._target_entity_id)
         if state:
-            new_hvac_mode = None
+            old_hvac_mode = state.state
+            new_hvac_mode: str
 
-            if self._mode == HVAC_MODE_COOL and state.state != HVAC_MODE_COOL:
+            if self._mode == HVAC_MODE_COOL and old_hvac_mode != HVAC_MODE_COOL:
                 new_hvac_mode = HVAC_MODE_COOL
-            elif self._mode == HVAC_MODE_HEAT and state.state != HVAC_MODE_HEAT:
+            elif self._mode == HVAC_MODE_HEAT and old_hvac_mode != HVAC_MODE_HEAT:
                 new_hvac_mode = HVAC_MODE_HEAT
+            else:
+                new_hvac_mode = old_hvac_mode
 
-            if new_hvac_mode:
+            if new_hvac_mode != old_hvac_mode or keep_alive:
                 _LOGGER.debug(
-                    "%s: %s - Setting HVAC mode to %s",
-                    self._thermostat_entity_id,
-                    self.name,
-                    new_hvac_mode
+                    "%s: %s - Setting HVAC mode to %s (%s)",
+                    self._thermostat_entity_id, self.name,
+                    new_hvac_mode,
+                    "keep_alive" if keep_alive else ""
                 )
                 data = {
                     ATTR_ENTITY_ID: self._target_entity_id,

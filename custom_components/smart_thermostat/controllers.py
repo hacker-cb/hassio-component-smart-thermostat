@@ -308,10 +308,17 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @final
     async def _async_start(self, cur_temp, target_temp) -> bool:
+        return True
 
-        if not self._current_pid_params:
-            _LOGGER.error("%s: %s - Start called but no PID params was set", self._thermostat_entity_id, self.name)
-            return False
+    @final
+    async def _async_stop(self):
+        await self._async_turn_off(None)
+        self._pid = None
+        pass
+
+    @final
+    def _setup_pid(self, cur_temp, target_temp):
+        _ = cur_temp
 
         output_limits = self._get_output_limits()
 
@@ -334,28 +341,52 @@ class AbstractPidController(AbstractController, abc.ABC):
         else:
             self._pid.set_auto_mode(enabled=True)
 
-        _LOGGER.debug("%s: %s - PID params: %s, current_output: %s, limits: %s",
+        self._last_output_limits = output_limits
+
+        _LOGGER.debug("%s: %s - Setup PID done. (params: %s, current_output: %s, limits: %s)",
                       self._thermostat_entity_id, self.name,
                       pid_params,
                       current_output, output_limits
                       )
 
-        await self._async_turn_on()
-
-        self._last_output_limits = output_limits
-
         return True
-
-    @final
-    async def _async_stop(self):
-        await self._async_turn_off(None)
-        self._pid = None
-        pass
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID instance to control", self._thermostat_entity_id, self.name)
             return False
+
+        too_cold = cur_temp < target_temp
+        too_hot = cur_temp > target_temp
+
+        need_turn_on = (too_hot and self._mode == HVAC_MODE_COOL) or (too_cold and self._mode == HVAC_MODE_HEAT)
+
+        if not need_turn_on and self.working:
+            await self._async_turn_off(reason="control")
+        elif need_turn_on and not self.working:
+            await self._async_turn_on(reason="control")
+        elif not need_turn_on and keep_alive:
+            await self._async_turn_off(reason="keep_alive")
+        elif need_turn_on and keep_alive:
+            await self._async_turn_on(reason="keep_alive")
+
+        # No need to work?
+        if not need_turn_on:
+            _LOGGER.info("%s: %s - Stopping PID, no work needed (cur: %s, target: %s)",
+                         self._thermostat_entity_id, self.name,
+                         cur_temp, target_temp
+                         )
+            self._pid = None
+            self._last_output = None
+            return
+
+        # Need to work again, no PID?
+        if not self._pid:
+            _LOGGER.info("%s: %s - Starting PID, work needed (cur: %s, target: %s)",
+                         self._thermostat_entity_id, self.name,
+                         cur_temp, target_temp
+                         )
+            self._setup_pid(cur_temp, target_temp)
 
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
@@ -374,26 +405,31 @@ class AbstractPidController(AbstractController, abc.ABC):
                 return
             self._pid.output_limits = output_limits
 
-        temperature = self.__round_to_target_precision(self._get_current_output())
+        current_output = self.__round_to_target_precision(self._get_current_output())
 
-        if self._last_output is not None and self._last_output != temperature:
+        if self._last_output is not None and self._last_output != current_output:
             _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator",
                          self._thermostat_entity_id, self.name,
-                         self._last_output, temperature
+                         self._last_output, current_output
                          )
-            await self.async_start()
+            self._pid = None
+            self._setup_pid(cur_temp, target_temp)
 
         output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
-        if temperature != output:
-            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
+        if current_output != output:
+            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s (control)",
                           self._thermostat_entity_id, self.name,
                           cur_temp, target_temp,
-                          temperature, output
+                          current_output, output
                           )
             await self._apply_output(output)
         elif keep_alive:
-            _LOGGER.debug("%s: %s - Keep-alive %s", self._thermostat_entity_id, self.name, output)
+            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, setting %s (keep_alive)",
+                          self._thermostat_entity_id, self.name,
+                          cur_temp, target_temp,
+                          output
+                          )
             await self._apply_output(output)
 
         self._last_output = output
@@ -593,9 +629,6 @@ class NumberPidController(AbstractPidController):
 
     @property
     def working(self):
-        return self._is_on()
-
-    def _is_on(self):
         return self._hass.states.is_state(
             self._switch_entity_id,
             STATE_ON if not self._switch_inverted else STATE_OFF
@@ -646,14 +679,6 @@ class NumberPidController(AbstractPidController):
             }, context=self._context
         )
 
-    async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
-        if not self._is_on():
-            await self._async_turn_on(reason="control")
-        elif keep_alive:
-            await self._async_turn_on(reason="keep_alive")
-
-        await super()._async_control(cur_temp, target_temp, time, force)
-
 
 class ClimatePidController(AbstractPidController):
     def __init__(
@@ -680,13 +705,6 @@ class ClimatePidController(AbstractPidController):
             return False
         hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
         return hvac_action not in (CURRENT_HVAC_IDLE, CURRENT_HVAC_OFF)
-
-    def _is_on(self):
-        state: State = self._hass.states.get(self._target_entity_id)
-        if not state:
-            return False
-        hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
-        return hvac_action not in (CURRENT_HVAC_OFF,)
 
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)
@@ -732,11 +750,6 @@ class ClimatePidController(AbstractPidController):
         )
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, keep_alive=False):
-        # Check is on
-        if not self._is_on():
-            await self._async_turn_on(reason="control")
-        elif keep_alive:
-            await self._async_turn_on(reason="keep_alive")
 
         # Set HVAC mode
         state: State = self._hass.states.get(self._target_entity_id)

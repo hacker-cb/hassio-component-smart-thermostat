@@ -173,16 +173,18 @@ KEY_SCHEMA = vol.Schema({
 
 DATA_SCHEMA = PLATFORM_SCHEMA.extend(
     {
+        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_UNIQUE_ID): cv.string,
         vol.Optional(CONF_HEATER): vol.Any(_cv_controller_target, [_cv_controller_target]),
         vol.Optional(CONF_COOLER): vol.Any(_cv_controller_target, [_cv_controller_target]),
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_STALE_DURATION): vol.All(
             cv.time_period, cv.positive_timedelta
         ),
-        vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
         vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
         vol.Optional(CONF_HEAT_COOL_COLD_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_HEAT_COOL_HOT_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
@@ -190,11 +192,9 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
             [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
         ),
-        vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_PRECISION): vol.In(
             [PRECISION_TENTHS, PRECISION_HALVES, PRECISION_WHOLE]
-        ),
-        vol.Optional(CONF_UNIQUE_ID): cv.string,
+        )
     }
 )
 

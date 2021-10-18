@@ -1,0 +1,72 @@
+debug_pid_package:
+  input_boolean:
+    test_inner_on_off_cooler:
+    test_inner_on_off_heater:
+
+    test_thermostat_on_off_cooler:
+    test_thermostat_on_off_heater:
+
+    test_number_thermostat_cooler_switch:
+    test_number_thermostat_heater_switch:
+
+  input_number:
+    test_inner_thermostat_cooler_sensor:
+      min: 5
+      max: 40
+      step: 0.1
+      initial: 40
+    test_inner_thermostat_heater_sensor:
+      min: 5
+      max: 40
+      step: 0.1
+      initial: 5
+    test_thermostat_sensor:
+      min: 5
+      max: 40
+      step: 0.1
+    test_number_thermostat_cooler:
+      min: 5
+      max: 20
+    test_number_thermostat_heater:
+      min: 20
+      max: 40
+
+  climate:
+    - platform: generic_thermostat
+      name: test_inner_cooler
+      target_sensor: input_number.test_inner_thermostat_cooler_sensor
+      heater: input_boolean.test_inner_on_off_cooler
+      ac_mode: true
+    - platform: generic_thermostat
+      name: test_inner_heater
+      target_sensor: input_number.test_inner_thermostat_heater_sensor
+      heater: input_boolean.test_inner_on_off_heater
+
+
+    - platform: smart_thermostat
+      name: test_thermostat
+      target_sensor: input_number.test_thermostat_sensor
+      sensor_stale_duration: "00:01:00"
+      cooler:
+        - entity_id: input_boolean.test_thermostat_on_off_cooler
+        - entity_id: climate.test_inner_cooler
+          pid_params: 0.5, 0, 0
+          pid_sample_period: "00:00:10"
+        - entity_id: input_number.test_number_thermostat_cooler
+          switch_entity_id: input_boolean.test_number_thermostat_cooler_switch
+          pid_params: 0.5, 0, 0
+          pid_sample_period: "00:00:10"
+
+      heater:
+        - entity_id: input_boolean.test_thermostat_on_off_heater
+          # keep_alive: "00:00:10"
+        - entity_id: climate.test_inner_heater
+          pid_params: 0.5, 0, 0
+          pid_sample_period: "00:00:10"
+          # keep_alive: "00:00:10"
+        - entity_id: input_number.test_number_thermostat_heater
+          switch_entity_id: input_boolean.test_number_thermostat_heater_switch
+          pid_params: 0.5, 0, 0
+          pid_sample_period: "00:00:10"
+          # keep_alive: "00:00:10"
+

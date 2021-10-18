@@ -1,0 +1,55 @@
+views:
+  - title: Home
+    cards:
+      - type: vertical-stack
+        cards:
+          - type: entities
+            entities:
+              - entity: input_boolean.test_number_thermostat_cooler_switch
+              - entity: input_number.test_number_thermostat_cooler
+            state_color: true
+            title: Number cooler
+          - type: thermostat
+            entity: climate.test_inner_cooler
+            name: Inner cooler
+          - type: entities
+            entities:
+              - entity: input_boolean.test_inner_on_off_cooler
+              - entity: input_number.test_inner_thermostat_cooler_sensor
+            title: Inner cooler
+            state_color: true
+          - type: entities
+            entities:
+              - entity: input_boolean.test_thermostat_on_off_cooler
+            state_color: true
+            title: ON/OFF cooler
+      - type: vertical-stack
+        cards:
+          - type: entities
+            entities:
+              - entity: input_boolean.test_number_thermostat_heater_switch
+              - entity: input_number.test_number_thermostat_heater
+            state_color: true
+            title: Number heater
+          - type: thermostat
+            entity: climate.test_inner_heater
+            name: Inner heater
+          - type: entities
+            entities:
+              - entity: input_boolean.test_inner_on_off_heater
+              - entity: input_number.test_inner_thermostat_heater_sensor
+            title: Inner heater
+            state_color: true
+          - type: entities
+            entities:
+              - entity: input_boolean.test_thermostat_on_off_heater
+            state_color: true
+            title: ON/OFF heater
+      - type: vertical-stack
+        cards:
+          - type: thermostat
+            entity: climate.test_thermostat
+            name: Smart thermostat
+          - type: entities
+            entities:
+              - entity: input_number.test_thermostat_sensor

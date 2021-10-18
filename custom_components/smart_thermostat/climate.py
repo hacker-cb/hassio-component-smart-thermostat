@@ -676,7 +676,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             now - self.hass.states.get(self.sensor_entity_id).last_updated,
         )
         _LOGGER.warning("%s: Sensor is stalled, all controllers will be stopped.", self.entity_id)
-        await self._async_update_temp("Stalled")
+        await self._async_update_temp(None)
 
     async def _async_controller_target_entity_changed(self, event):
         """Handle controller target entity changes."""
@@ -687,7 +687,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     @callback
     async def _async_update_temp(self, temp):
         """Update thermostat with latest state from sensor."""
-        if temp in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if temp in (STATE_UNAVAILABLE, STATE_UNKNOWN, None):
             self._cur_temp = None
             return
 

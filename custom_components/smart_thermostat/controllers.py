@@ -359,20 +359,16 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s",
-                         self._thermostat_entity_id,
-                         self.name,
-                         self._pid.setpoint,
-                         target_temp
+                         self._thermostat_entity_id, self.name,
+                         self._pid.setpoint, target_temp
                          )
             self._pid.setpoint = target_temp
 
         output_limits = self._get_output_limits()
         if self._last_output_limits != output_limits:
             _LOGGER.info("%s: %s - Output limits were changed from %s to %s",
-                         self._thermostat_entity_id,
-                         self.name,
-                         self._last_output_limits,
-                         output_limits
+                         self._thermostat_entity_id, self.name,
+                         self._last_output_limits, output_limits
                          )
             if not self.__validate_output_limits(output_limits):
                 return
@@ -382,10 +378,8 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         if self._last_output is not None and self._last_output != temperature:
             _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator",
-                         self._thermostat_entity_id,
-                         self.name,
-                         self._last_output,
-                         temperature
+                         self._thermostat_entity_id, self.name,
+                         self._last_output, temperature
                          )
             await self.async_start()
 
@@ -393,12 +387,9 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         if temperature != output:
             _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s",
-                          self._thermostat_entity_id,
-                          self.name,
-                          cur_temp,
-                          target_temp,
-                          temperature,
-                          output
+                          self._thermostat_entity_id, self.name,
+                          cur_temp, target_temp,
+                          temperature, output
                           )
             await self._apply_output(output)
         elif keep_alive:
@@ -554,14 +545,10 @@ class SwitchController(AbstractController):
         need_turn_on = (too_hot and self._mode == HVAC_MODE_COOL) or (too_cold and self._mode == HVAC_MODE_HEAT)
 
         _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, (cur: %s, target: %s)",
-                      self._thermostat_entity_id,
-                      self.name,
-                      too_hot,
-                      too_cold,
-                      need_turn_on,
-                      self._is_on(),
-                      cur_temp,
-                      target_temp
+                      self._thermostat_entity_id, self.name,
+                      too_hot, too_cold,
+                      need_turn_on, self._is_on(),
+                      cur_temp, target_temp
                       )
 
         if self._is_on():
@@ -747,7 +734,7 @@ class ClimatePidController(AbstractPidController):
                     "%s: %s - Setting HVAC mode to %s (%s)",
                     self._thermostat_entity_id, self.name,
                     new_hvac_mode,
-                    "keep_alive" if keep_alive else ""
+                    "keep_alive" if keep_alive else "control"
                 )
                 data = {
                     ATTR_ENTITY_ID: self._target_entity_id,

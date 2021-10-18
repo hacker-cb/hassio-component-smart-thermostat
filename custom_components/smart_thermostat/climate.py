@@ -57,7 +57,7 @@ from .controllers import SwitchController, Thermostat, AbstractController, PidPa
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SWITCH_TOLERANCE = 0.3
-DEFAULT_HEAT_COOL_TOLERANCE = 0.2
+DEFAULT_HEAT_COOL_TOLERANCE = 0.3
 DEFAULT_NAME = "Smart Thermostat with auto Heat/Cool mode and PID control support"
 DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
 # DEFAULT_PID_KP = 1.0

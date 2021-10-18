@@ -460,7 +460,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 await self._async_update_temp(sensor_state.state)
                 self.async_write_ha_state()
 
-            _LOGGER.info("%s: Ready, supported HVAC modes: %s", self.name, self._hvac_list)
+            _LOGGER.info("%s: Ready, supported HVAC modes: %s, Stale duration: %s",
+                         self.name, self._hvac_list, self._sensor_stale_duration)
 
             self.hass.create_task(_async_first_run())
 

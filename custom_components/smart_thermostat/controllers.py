@@ -335,6 +335,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._auto_tune = False
         self._last_output: Optional[float] = None
         self._last_output_limits: None
+        self._last_current_value = None
 
     @final
     async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
@@ -426,9 +427,7 @@ class AbstractPidController(AbstractController, abc.ABC):
     @final
     async def _async_stop(self):
         await self._async_turn_off(None)
-        self._pid = None
-        self._last_output = None
-        pass
+        self._reset_pid()
 
     @final
     def _setup_pid(self, cur_temp, target_temp):
@@ -465,6 +464,11 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         return True
 
+    def _reset_pid(self):
+        self._pid = None
+        self._last_output = None
+        self._last_current_value = None
+
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID", self._thermostat_entity_id, self.name)
@@ -497,29 +501,33 @@ class AbstractPidController(AbstractController, abc.ABC):
                          self._thermostat_entity_id, self.name,
                          self._last_output, current_output, reason
                          )
-            self._pid = None
+            self._reset_pid()
             self._setup_pid(cur_temp, target_temp)
 
-        output = self.__round_to_target_precision(float(self._pid(cur_temp)))
+        # Run PID only if current temperature was changed
+        if self._last_current_value != cur_temp:
 
-        if current_output != output:
-            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, adjusting from %s to %s, limits: %s (%s)",
-                          self._thermostat_entity_id, self.name,
-                          cur_temp, target_temp,
-                          current_output, output,
-                          output_limits, reason
-                          )
-            await self._apply_output(output)
-        elif reason == REASON_KEEP_ALIVE:
-            _LOGGER.debug("%s: %s - Current temp: %s, target temp: %s, setting %s. limits: (%s)",
-                          self._thermostat_entity_id, self.name,
-                          cur_temp, target_temp,
-                          output,
-                          output_limits, reason
-                          )
-            await self._apply_output(output)
+            output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
-        self._last_output = output
+            if current_output != output:
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, adjusting from %s to %s, limits: %s (%s)",
+                              self._thermostat_entity_id, self.name,
+                              self._last_current_value, cur_temp, target_temp,
+                              current_output, output,
+                              output_limits, reason
+                              )
+                await self._apply_output(output)
+            elif reason == REASON_KEEP_ALIVE:
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, setting %s. limits: (%s)",
+                              self._thermostat_entity_id, self.name,
+                              self._last_current_value, cur_temp, target_temp,
+                              output,
+                              output_limits, reason
+                              )
+                await self._apply_output(output
+                                         )
+            self._last_current_value = cur_temp
+            self._last_output = output
 
     def __validate_output_limits(self, output_limits: (None, None)) -> bool:
         min_temp, max_temp = output_limits

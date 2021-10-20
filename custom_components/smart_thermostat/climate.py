@@ -206,6 +206,8 @@ def _create_controllers(
         heat_cool_cold_tolerance: float,
         heat_cool_hot_tolerance: float
 ) -> [AbstractController]:
+    if conf_list is None:
+        return []
     if not isinstance(conf_list, list):
         conf_list = [conf_list]
 
@@ -326,27 +328,31 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     heater_config = config.get(CONF_HEATER)
     cooler_config = config.get(CONF_COOLER)
 
-    coolers = _create_controllers(
-        'cooler',
-        HVAC_MODE_COOL,
-        cooler_config,
-        heat_cool_cold_tolerance,
-        heat_cool_hot_tolerance
-    ) if cooler_config else None
+    controllers = []
 
-    heaters = _create_controllers(
-        'heater',
-        HVAC_MODE_HEAT,
-        heater_config,
-        heat_cool_cold_tolerance,
-        heat_cool_hot_tolerance
-    ) if heater_config else None
+    if cooler_config:
+        controllers += _create_controllers(
+            'cooler',
+            HVAC_MODE_COOL,
+            cooler_config,
+            heat_cool_cold_tolerance,
+            heat_cool_hot_tolerance
+        )
+
+    if heater_config:
+        controllers += _create_controllers(
+            'heater',
+            HVAC_MODE_HEAT,
+            heater_config,
+            heat_cool_cold_tolerance,
+            heat_cool_hot_tolerance
+        )
 
     async_add_entities(
         [
             SmartThermostat(
                 name,
-                coolers + heaters,
+                controllers,
                 sensor_entity_id,
                 sensor_stale_duration,
                 min_temp,

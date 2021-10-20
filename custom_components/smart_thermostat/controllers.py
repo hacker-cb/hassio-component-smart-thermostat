@@ -183,12 +183,12 @@ class AbstractController(abc.ABC):
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
 
-        # _LOGGER.debug("%s: %s - Control: reason: %s, cur: %s, target: %s, force: %s, time: %s, keep_alive: %s",
-        #               self._thermostat_entity_id, self.name, reason,
+        # _LOGGER.debug("%s: %s - Control: cur: %s, target: %s, force: %s, time: %s, (%s)",
+        #               self._thermostat_entity_id, self.name,
         #               cur_temp, target_temp,
         #               force,
         #               True if time else False,
-        #               keep_alive
+        #               reason
         #               )
 
         await self._async_control(cur_temp, target_temp, time=time, force=force, reason=reason)
@@ -516,22 +516,19 @@ class AbstractPidController(AbstractController, abc.ABC):
 
             output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
-            if current_output != output:
-                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, adjusting from %s to %s, limits: %s (%s)",
+            if current_output != output or reason == REASON_KEEP_ALIVE:
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, limits: %s, adjusting from %s to %s (%s)",
                               self._thermostat_entity_id, self.name,
-                              self._last_current_value, cur_temp, target_temp,
-                              current_output, output,
-                              output_limits, reason
+                              self._last_current_value, cur_temp, target_temp, output_limits,
+                              current_output, output, reason
                               )
                 await self._apply_output(output)
-            elif reason == REASON_KEEP_ALIVE:
-                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, setting %s. limits: (%s)",
+            else:
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, limits: %s, no changes needed, output: %s (%s)",
                               self._thermostat_entity_id, self.name,
-                              self._last_current_value, cur_temp, target_temp,
-                              output,
-                              output_limits, reason
+                              self._last_current_value, cur_temp, target_temp, output_limits,
+                              current_output, reason
                               )
-                await self._apply_output(output)
 
             self._last_output = output
             self._last_current_value = cur_temp

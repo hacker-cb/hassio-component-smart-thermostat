@@ -513,7 +513,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             self._setup_pid(cur_temp, target_temp)
 
         # Run PID only if static period configured or if sensor was changed.
-        if reason in (REASON_THERMOSTAT_SENSOR_CHANGED, REASON_PID_CONTROL):
+        if reason in (REASON_THERMOSTAT_SENSOR_CHANGED, REASON_PID_CONTROL, REASON_KEEP_ALIVE):
 
             output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 

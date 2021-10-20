@@ -224,6 +224,8 @@ def _create_controllers(
 
         domain = split_entity_id(entity_id)[0]
 
+        controller = None
+
         if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
             min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
             cold_tolerance = conf[CONF_COLD_TOLERANCE]
@@ -259,7 +261,6 @@ def _create_controllers(
                 keep_alive,
                 min_duration
             )
-            controllers.append(controller)
 
         elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
             pid_params = conf[CONF_PID_PARAMS]
@@ -277,7 +278,6 @@ def _create_controllers(
                 conf[CONF_PID_SWITCH_ENTITY_ID],
                 conf[CONF_PID_SWITCH_INVERTED]
             )
-            controllers.append(controller)
 
         elif domain in [CLIMATE_DOMAIN]:
             pid_params = conf[CONF_PID_PARAMS]
@@ -293,12 +293,13 @@ def _create_controllers(
                 conf[CONF_PID_MIN],
                 conf[CONF_PID_MAX]
             )
-            controllers.append(controller)
 
         else:
             _LOGGER.error(f"Unsupported {name} domain: '{domain}' for entity {entity_id}")
 
-        controller_number += 1
+        if controller:
+            controllers.append(controller)
+            controller_number += 1
 
     return controllers
 

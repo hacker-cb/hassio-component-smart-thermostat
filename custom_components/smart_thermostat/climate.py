@@ -60,7 +60,6 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_SWITCH_TOLERANCE = 0.3
 DEFAULT_HEAT_COOL_TOLERANCE = 0.3
 DEFAULT_NAME = "Smart Thermostat"
-DEFAULT_PID_SAMPLE_PERIOD = "00:10:00"
 # DEFAULT_PID_KP = 1.0
 # DEFAULT_PID_KI = 1.0
 # DEFAULT_PID_KD = 1.0
@@ -124,7 +123,7 @@ TARGET_SCHEMA_PID_REGULATOR_COMMON = TARGET_SCHEMA_COMMON.extend({
     vol.Required(CONF_PID_PARAMS
                  # ,default=[DEFAULT_PID_KP, DEFAULT_PID_KI, DEFAULT_PID_KD]
                  ): _cv_pid_params_list,
-    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=DEFAULT_PID_SAMPLE_PERIOD): cv.positive_time_period,
+    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=None): vol.Any(None, cv.positive_time_period),
     vol.Optional(CONF_PID_MIN, default=None): vol.Any(None, vol.Coerce(float)),
     vol.Optional(CONF_PID_MAX, default=None): vol.Any(None, vol.Coerce(float))
 })

@@ -324,7 +324,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             mode,
             target_entity_id: str,
             pid_params: PidParams,
-            pid_sample_period: timedelta,
+            pid_sample_period: Optional[timedelta],
             inverted: bool,
             keep_alive: Optional[timedelta],
             target_min: Optional[float],
@@ -367,11 +367,12 @@ class AbstractPidController(AbstractController, abc.ABC):
                              )
                 self.set_pid_params(self._initial_pid_params)
 
-        self._thermostat.async_on_remove(
-            async_track_time_interval(
-                self._hass, self.__async_pid_control, self._pid_sample_period
+        if self._pid_sample_period:
+            self._thermostat.async_on_remove(
+                async_track_time_interval(
+                    self._hass, self.__async_pid_control, self._pid_sample_period
+                )
             )
-        )
 
     @final
     async def __async_pid_control(self, time=None):
@@ -433,6 +434,7 @@ class AbstractPidController(AbstractController, abc.ABC):
     async def _async_stop(self):
         await self._async_turn_off(None)
         self._reset_pid()
+        self._last_current_value = None
 
     @final
     def _setup_pid(self, cur_temp, target_temp):
@@ -450,7 +452,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             setpoint=target_temp,
             output_limits=output_limits,
             auto_mode=False,
-            sample_time=self._pid_sample_period.total_seconds()
+            sample_time=self._pid_sample_period.total_seconds() if self._pid_sample_period else None
         )
 
         current_output = self.__round_to_target_precision(self._get_current_output())
@@ -472,7 +474,6 @@ class AbstractPidController(AbstractController, abc.ABC):
     def _reset_pid(self):
         self._pid = None
         self._last_output = None
-        self._last_current_value = None
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
@@ -509,8 +510,8 @@ class AbstractPidController(AbstractController, abc.ABC):
             self._reset_pid()
             self._setup_pid(cur_temp, target_temp)
 
-        # Run PID only if current temperature was changed
-        if self._last_current_value != cur_temp:
+        # Run PID only if static period configured or if sensor was changed.
+        if reason in (REASON_THERMOSTAT_SENSOR_CHANGED, REASON_PID_CONTROL):
 
             output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
@@ -529,10 +530,10 @@ class AbstractPidController(AbstractController, abc.ABC):
                               output,
                               output_limits, reason
                               )
-                await self._apply_output(output
-                                         )
-            self._last_current_value = cur_temp
+                await self._apply_output(output)
+
             self._last_output = output
+            self._last_current_value = cur_temp
 
     def __validate_output_limits(self, output_limits: (None, None)) -> bool:
         min_temp, max_temp = output_limits

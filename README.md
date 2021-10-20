@@ -140,7 +140,7 @@ Domains: `climate`
 * `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
 * `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
-* `pid_sample_period` _(Optional, default="00:10:00")_ - PID sample time period.
+* `pid_sample_period` _(Optional)_ - PID constant sample time period.
 * `min` _(Optional)_ - Minimum temperature which can be set. Attribute `min_temp` from `entity_id` will be used if not specified.
 * `max` _(Optional)_ - Maximum temperature which can be set. Attribute `max_temp` from `entity_id` will be used if not specified.
 
@@ -148,7 +148,7 @@ Domains: `climate`
 
 * Climate `entity_id` will be turned on when controller is active.
 * Climate `entity_id` will be turned off when controller is not active.
-* Climate `entity_id` temperature will be adjusted every `pid_sample_period` according provided `pid_params`.
+* Climate `entity_id` temperature will be adjusted every `pid_sample_period` it is provided, or on every `CONFIF.target_sensor` update if `pid_sample_period` is not provided.
 * `pid_params` will be inverted if `inverted` was set to `true`
 
 ### Number + Switch controller (PID mode supported)
@@ -161,7 +161,7 @@ Domains: `number`,`input_number`
 * `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
 * `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
-* `pid_sample_period` _(Optional, default="00:10:00")_ - PID sample time period.
+* `pid_sample_period` _(Optional)_ - PID constant sample time period.
 * `min` _(Optional)_ - Minimum temperature which can be set. Attribute `min` from `entity_id` will be used if not specified.
 * `max` _(Optional)_ - Maximum temperature which can be set. Attribute `max` from `entity_id` will be used if not specified.
 * `switch_entity_id` _(Required)_ - Switch entity which belongs to `switch`,`input_boolean` domains.
@@ -171,7 +171,7 @@ Domains: `number`,`input_number`
 
 * Switch `switch_entity_id` will be turned on when controller is active.
 * Switch `switch_entity_id` will be turned off when controller is not active.
-* Number `entity_id` will be adjusted every `pid_sample_period` according provided `pid_params`.
+* Number `entity_id` temperature will be adjusted every `pid_sample_period` it is provided, or on every `CONFIF.target_sensor` update if `pid_sample_period` is not provided.
 * `pid_params` will be inverted if `inverted` was set to `true`
 * `switch_entity_id` behavior will be inverted if `switch_inverted` was set to `true`
 

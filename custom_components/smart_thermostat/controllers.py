@@ -361,9 +361,14 @@ class AbstractPidController(AbstractController, abc.ABC):
             raise NotImplementedError(f"Auto-tuning PID params unsupported now")
         else:
             if self._initial_pid_params:
-                self.set_pid_params(self._initial_pid_params, reason="inital")
+                self.set_pid_params(self._initial_pid_params, reason="initial")
 
         if self._pid_sample_period:
+            _LOGGER.info("%s: %s - Setting up PID regulator for period: %s",
+                         self._thermostat_entity_id,
+                         self.name,
+                         self._pid_sample_period
+                         )
             self._thermostat.async_on_remove(
                 async_track_time_interval(
                     self._hass, self.__async_pid_control, self._pid_sample_period

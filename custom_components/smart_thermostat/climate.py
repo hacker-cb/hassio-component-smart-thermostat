@@ -52,7 +52,8 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
-from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, ClimatePidController
+from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, ClimatePidController, REASON_THERMOSTAT_FIRST_RUN, \
+    REASON_THERMOSTAT_HVAC_MODE_CHANGED, REASON_THERMOSTAT_TARGET_TEMP_CHANGED, REASON_THERMOSTAT_SENSOR_CHANGED, REASON_CONTROL_ENTITY_CHANGED
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -446,7 +447,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         async def _async_first_run():
             """Will called one time. Need on hot reload when HA core is running"""
-            await self._async_control(reason="first_run")
+            await self._async_control(reason=REASON_THERMOSTAT_FIRST_RUN)
             self.async_write_ha_state()
 
         @callback
@@ -615,7 +616,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         self._hvac_mode = hvac_mode
 
-        await self._async_control(force=True, reason="hvac_mode_change")
+        await self._async_control(force=True, reason=REASON_THERMOSTAT_HVAC_MODE_CHANGED)
 
         # Ensure we update the current operation after changing the mode
         self.async_write_ha_state()
@@ -626,7 +627,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         if temperature is None:
             return
         self._target_temp = temperature
-        await self._async_control(force=True, reason="target_temp_changed")
+        await self._async_control(force=True, reason=REASON_THERMOSTAT_TARGET_TEMP_CHANGED)
         self.async_write_ha_state()
 
     @property
@@ -664,7 +665,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._sensor_stale_duration,
             )
 
-        await self._async_control(reason="sensor_changed")
+        await self._async_control(reason=REASON_THERMOSTAT_SENSOR_CHANGED)
         self.async_write_ha_state()
 
     @callback
@@ -682,7 +683,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
     async def _async_controller_target_entity_changed(self, event):
         """Handle controller target entity changes."""
         _ = event
-        await self._async_control(reason="entity_changed")
+        await self._async_control(reason=REASON_CONTROL_ENTITY_CHANGED)
         self.async_write_ha_state()
 
     @callback

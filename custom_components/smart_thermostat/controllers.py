@@ -17,10 +17,15 @@ from homeassistant.exceptions import ConditionError
 from homeassistant.helpers import condition
 from homeassistant.helpers.event import async_track_time_interval
 
-ATTR_PID_PARAMS = "pid_params"
-
 _LOGGER = logging.getLogger(__name__)
 
+ATTR_PID_PARAMS = "pid_params"
+
+REASON_THERMOSTAT_FIRST_RUN = "first_run"
+REASON_THERMOSTAT_HVAC_MODE_CHANGED = "hvac_mode_changed"
+REASON_THERMOSTAT_TARGET_TEMP_CHANGED = "target_temp_changed"
+REASON_THERMOSTAT_SENSOR_CHANGED = "sensor_changed"
+REASON_CONTROL_ENTITY_CHANGED = "control_entity_changed"
 REASON_KEEP_ALIVE = "keep_alive"
 REASON_PID_CONTROL = "pid_control"
 

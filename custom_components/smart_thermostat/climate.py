@@ -202,7 +202,7 @@ PLATFORM_SCHEMA = vol.All(KEY_SCHEMA, DATA_SCHEMA)
 def _create_controllers(
         prefix: str,
         mode: str,
-        conf_list,
+        conf_list: Any,
         heat_cool_cold_tolerance: float,
         heat_cool_hot_tolerance: float
 ) -> [AbstractController]:

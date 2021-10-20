@@ -361,12 +361,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             raise NotImplementedError(f"Auto-tuning PID params unsupported now")
         else:
             if self._initial_pid_params:
-                _LOGGER.info("%s: %s - using initial PID params: %s",
-                             self._thermostat_entity_id,
-                             self.name,
-                             self._initial_pid_params
-                             )
-                self.set_pid_params(self._initial_pid_params)
+                self.set_pid_params(self._initial_pid_params, reason="inital")
 
         if self._pid_sample_period:
             self._thermostat.async_on_remove(
@@ -390,24 +385,24 @@ class AbstractPidController(AbstractController, abc.ABC):
         }
 
     @final
-    def set_pid_params(self, pid_params: PidParams):
+    def set_pid_params(self, pid_params: PidParams, reason=None):
         """Set new PID params."""
         if not pid_params:
-            raise ValueError(f"PID params can't be None")
+            raise ValueError(f"PID params can't be None ({reason})")
 
         if self._mode == HVAC_MODE_COOL:
             pid_params.invert()
-            _LOGGER.info("%s: %s - Cooler mode. Inverting all PID params: %s",
+            _LOGGER.info("%s: %s - Cooler mode. Inverting all PID params: %s (%s)",
                          self._thermostat_entity_id,
                          self.name,
-                         pid_params
+                         pid_params, reason
                          )
         if self._inverted:
             pid_params.invert()
-            _LOGGER.info("%s: %s - Target behavior inverted requested in config. Inverting all PID params: %s",
+            _LOGGER.info("%s: %s - Target behavior inverted requested in config. Inverting all PID params: %s (%s)",
                          self._thermostat_entity_id,
                          self.name,
-                         pid_params
+                         pid_params, reason
                          )
 
         self._current_pid_params = pid_params
@@ -417,10 +412,11 @@ class AbstractPidController(AbstractController, abc.ABC):
             self._pid.Ki = pid_params.ki
             self._pid.Kd = pid_params.kd
 
-        _LOGGER.info("%s: %s - New PID params: %s",
+        _LOGGER.info("%s: %s - New PID params: %s (%ss)",
                      self._thermostat_entity_id,
                      self.name,
-                     self._current_pid_params
+                     self._current_pid_params,
+                     reason
                      )
 
     @abc.abstractmethod

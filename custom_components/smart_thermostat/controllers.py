@@ -282,11 +282,12 @@ class SwitchController(AbstractController):
 
         need_turn_on = (too_hot and self._mode == HVAC_MODE_COOL) or (too_cold and self._mode == HVAC_MODE_HEAT)
 
-        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, (cur: %s, target: %s)",
+        _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, cur: %s, target: %s (%s)",
                       self._thermostat_entity_id, self.name,
                       too_hot, too_cold,
                       need_turn_on, self._is_on(),
-                      cur_temp, target_temp
+                      cur_temp, target_temp,
+                      reason
                       )
 
         if self._is_on():

@@ -783,8 +783,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             # Call async_control() on running controllers
             for controller in self._controllers:
-                if controller.running:
-                    await controller.async_control(time=time, force=force, reason=reason)
+                await controller.async_control(time=time, force=force, reason=reason)
 
     @property
     def supported_features(self):

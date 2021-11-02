@@ -26,6 +26,7 @@ REASON_THERMOSTAT_FIRST_RUN = "first_run"
 REASON_THERMOSTAT_HVAC_MODE_CHANGED = "hvac_mode_changed"
 REASON_THERMOSTAT_TARGET_TEMP_CHANGED = "target_temp_changed"
 REASON_THERMOSTAT_SENSOR_CHANGED = "sensor_changed"
+REASON_THERMOSTAT_NOT_RUNNING = "not_running"
 REASON_CONTROL_ENTITY_CHANGED = "control_entity_changed"
 REASON_KEEP_ALIVE = "keep_alive"
 REASON_PID_CONTROL = "pid_control"
@@ -178,8 +179,6 @@ class AbstractController(abc.ABC):
     @final
     async def async_control(self, time=None, force=False, reason=None):
         """Callback which will be called from Climate Entity"""
-        if not self.__running:
-            return
 
         cur_temp = self._thermostat.get_current_temperature()
         target_temp = self._thermostat.get_target_temperature()
@@ -192,7 +191,10 @@ class AbstractController(abc.ABC):
         #               reason
         #               )
 
-        await self._async_control(cur_temp, target_temp, time=time, force=force, reason=reason)
+        if not self.__running:
+            await self._async_ensure_is_off()
+        else:
+            await self._async_control(cur_temp, target_temp, time=time, force=force, reason=reason)
 
     @final
     async def __async_keep_alive(self, time=None):
@@ -201,6 +203,9 @@ class AbstractController(abc.ABC):
     @abc.abstractmethod
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         """Control method. Should be overwritten in child classes"""
+
+    async def _async_ensure_is_off(self):
+        """Ensure that target is off"""
 
 
 class SwitchController(AbstractController):
@@ -256,6 +261,10 @@ class SwitchController(AbstractController):
 
     async def _async_stop(self):
         await self._async_turn_off(reason=REASON_THERMOSTAT_STOP)
+
+    async def _async_ensure_is_off(self):
+        if self._is_on():
+            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         # If the `force` argument is True, we
@@ -477,6 +486,10 @@ class AbstractPidController(AbstractController, abc.ABC):
     def _reset_pid(self):
         self._pid = None
         self._last_output = None
+
+    async def _async_ensure_is_off(self):
+        if self._is_on():
+            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:

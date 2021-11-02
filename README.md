@@ -10,6 +10,7 @@ Thermostat was designed to control different kind of entities (not only switchab
 
 ### Current features:
 
+* Support multiply heaters/coolers.
 * Supports `heat_cool` mode.
 * Supports `away` mode.
 * Supports invert logic of the heater/cooler.
@@ -75,6 +76,9 @@ _NOTE: at least one of `heater` or `cooler` is required._
 Initial HVAC mode can be set via `initial_hvac_mode` config option.
 
 Thermostat behavior will depend on active HVAC mode. HVAC mode can be set in UI. 
+
+_NOTE: Smart thermostat will always take full control of the heaters/coolers. 
+So it will turn them on/off back if you change their states manually_
 
 ### HVAC_MODE = `heat`
 _NOTE: available if at least one `CONFIG.heater` was defined._

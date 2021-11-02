@@ -11,7 +11,7 @@ Thermostat was designed to control different kind of entities (not only switchab
 ### Current features:
 
 * Supports `heat_cool` mode.
-* Supports `sway` mode.
+* Supports `away` mode.
 * Supports invert logic of the heater/cooler.
 * Protection if target sensor does not report values for period of time.
 

@@ -21,6 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 ATTR_PID_PARAMS = "pid_params"
 
+REASON_THERMOSTAT_STOP = "stop"
 REASON_THERMOSTAT_FIRST_RUN = "first_run"
 REASON_THERMOSTAT_HVAC_MODE_CHANGED = "hvac_mode_changed"
 REASON_THERMOSTAT_TARGET_TEMP_CHANGED = "target_temp_changed"
@@ -254,7 +255,7 @@ class SwitchController(AbstractController):
         return True
 
     async def _async_stop(self):
-        await self._async_turn_off(None)
+        await self._async_turn_off(reason=REASON_THERMOSTAT_STOP)
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         # If the `force` argument is True, we
@@ -434,7 +435,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @final
     async def _async_stop(self):
-        await self._async_turn_off(None)
+        await self._async_turn_off(REASON_THERMOSTAT_STOP)
         self._reset_pid()
         self._last_current_value = None
 

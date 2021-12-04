@@ -717,25 +717,26 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             debug_info = None
             _ = debug_info
 
-            new_hvac_action = CURRENT_HVAC_IDLE
+            new_hvac_action = self._hvac_action
 
             if None not in (cur_temp, target_temp):
 
                 too_cold = cur_temp <= target_temp - self._heat_cool_cold_tolerance
                 too_hot = cur_temp >= target_temp + self._heat_cool_hot_tolerance
 
-                if self._hvac_mode in (HVAC_MODE_COOL, HVAC_MODE_HEAT_COOL) and too_hot:
+                if self._hvac_mode == HVAC_MODE_COOL or (self._hvac_mode == HVAC_MODE_HEAT_COOL and too_hot):
                     new_hvac_action = CURRENT_HVAC_COOL
-                elif self._hvac_mode in (HVAC_MODE_HEAT, HVAC_MODE_HEAT_COOL) and too_cold:
+                elif self._hvac_mode == HVAC_MODE_HEAT or (self._hvac_mode == HVAC_MODE_HEAT_COOL and too_cold):
                     new_hvac_action = CURRENT_HVAC_HEAT
                 debug_info = f"hvac_action: {new_hvac_action}, (cur: {cur_temp}, target: {target_temp})"
             else:
+                new_hvac_action = CURRENT_HVAC_IDLE
                 debug_info = f"current/target not available (cur: {cur_temp}, target: {target_temp})"
 
             # _LOGGER.debug("%s: HVAC old: %s, new: %s (%s): %s", self.entity_id, self._hvac_action, new_hvac_action, reason, debug_info)
 
             if self._hvac_action != new_hvac_action:
-                _LOGGER.info("%s: Changed HVAC action from %s to %s (cur: %s, target: %s, mode: %s)",
+                _LOGGER.info("%s: Changed controllers HVAC action from %s to %s (cur: %s, target: %s, mode: %s)",
                              self.entity_id, self._hvac_action, new_hvac_action, cur_temp, target_temp, self._hvac_mode)
                 self._hvac_action = new_hvac_action
 

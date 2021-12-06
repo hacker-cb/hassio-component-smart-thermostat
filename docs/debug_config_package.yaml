@@ -50,23 +50,23 @@ debug_pid_package:
       cooler:
         - entity_id: input_boolean.test_thermostat_on_off_cooler
         - entity_id: climate.test_inner_cooler
-          pid_params: 1.2, 0.5, 0.1
+          pid_params: 0.2, 0.1. 0
           pid_sample_period: "00:00:10"
         - entity_id: input_number.test_number_thermostat_cooler
           switch_entity_id: input_boolean.test_number_thermostat_cooler_switch
-          pid_params: 1.2, 0.5, 0.1
+          pid_params: 0.2, 0.1. 0
           pid_sample_period: "00:00:10"
 
       heater:
         - entity_id: input_boolean.test_thermostat_on_off_heater
           # keep_alive: "00:00:10"
         - entity_id: climate.test_inner_heater
-          pid_params: 1.2, 0.5, 0.1
+          pid_params: 0.2, 0.1. 0
           pid_sample_period: "00:00:10"
           # keep_alive: "00:00:10"
         - entity_id: input_number.test_number_thermostat_heater
           switch_entity_id: input_boolean.test_number_thermostat_heater_switch
-          pid_params: 1.2, 0.5, 0.1
+          pid_params: 0.2, 0.1. 0
           pid_sample_period: "00:00:10"
           # keep_alive: "00:00:10"
 

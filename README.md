@@ -90,7 +90,7 @@ _NOTE: available if at least one `CONFIG.heater` was defined._
 
 _NOTE: available if at least one `CONFIG.coller` was defined._
 
-* All **cooler** controllers will be turned on. Specific behavior of each **heater** will depend on the controller type.
+* All **cooler** controllers will be turned on. Specific behavior of each **cooler** will depend on the controller type.
 * All **heater** controllers will be turned off.
 
 ### HVAC_MODE = `heat_cool` 

@@ -374,7 +374,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                 self.set_pid_params(self._initial_pid_params, reason="initial")
 
         if self._pid_sample_period:
-            _LOGGER.info("%s: %s - Setting up PID regulator for period: %s",
+            _LOGGER.info("%s: %s - Setting up PID regulator. Mode: static period (%s)",
                          self._thermostat_entity_id,
                          self.name,
                          self._pid_sample_period
@@ -384,6 +384,11 @@ class AbstractPidController(AbstractController, abc.ABC):
                     self._hass, self.__async_pid_control, self._pid_sample_period
                 )
             )
+        else:
+            _LOGGER.info("%s: %s - Setting up PID regulator. Mode: Dynamic period on sensor changes",
+                         self._thermostat_entity_id,
+                         self.name
+                         )
 
     @final
     async def __async_pid_control(self, time=None):

@@ -538,7 +538,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
             output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
-            if current_output != output or reason == REASON_KEEP_ALIVE:
+            if current_output != output:
                 _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, limits: %s, adjusting from %s to %s (%s)",
                               self._thermostat_entity_id, self.name,
                               self._last_current_value, cur_temp, target_temp, output_limits,

@@ -108,7 +108,7 @@ _NOTE: available if at least one `CONFIG.heater` and at least one `CONFIG.cooler
   * All **cooler** controllers will be turned off.
   * Specific behavior of each heater/cooler will depend on the controller type.
 
-_NOTE: turning on controller **DOES NOT MEAN** turning on `CONFIG.CONTROLLER.enitity_id` inside controller. 
+_NOTE: turning on controller **DOES NOT MEANS** turning on `CONFIG.CONTROLLER.enitity_id` inside controller. 
 Controller behavior depends on the **specific controller logic** and described below for each controller._
 
 ## Controllers
@@ -144,7 +144,7 @@ Domains: `climate`
 * `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
 * `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
 * `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
-* `pid_sample_period` _(Optional)_ - PID constant sample time period. Default is `00:10:00` (10 minutes).
+* `pid_sample_period` _(Optional)_ - PID constant sample time period.
 * `min` _(Optional)_ - Minimum temperature which can be set. Attribute `min_temp` from `entity_id` will be used if not specified.
 * `max` _(Optional)_ - Maximum temperature which can be set. Attribute `max_temp` from `entity_id` will be used if not specified.
 

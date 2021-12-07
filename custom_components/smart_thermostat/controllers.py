@@ -8,8 +8,8 @@ from simple_pid import PID
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, ATTR_HVAC_ACTION
 from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
-    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP, CURRENT_HVAC_OFF
-from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE
+    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP, CURRENT_HVAC_OFF, ATTR_TARGET_TEMP_STEP
+from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE, ATTR_STEP
 from homeassistant.const import STATE_OFF
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
 from homeassistant.core import DOMAIN as HA_DOMAIN, HomeAssistant, Context, CALLBACK_TYPE, State, split_entity_id
@@ -30,6 +30,10 @@ REASON_THERMOSTAT_NOT_RUNNING = "not_running"
 REASON_CONTROL_ENTITY_CHANGED = "control_entity_changed"
 REASON_KEEP_ALIVE = "keep_alive"
 REASON_PID_CONTROL = "pid_control"
+
+
+def _round_step(value: float, step: float):
+    return round(value / step) * step
 
 
 class Thermostat(abc.ABC):
@@ -472,7 +476,7 @@ class AbstractPidController(AbstractController, abc.ABC):
             sample_time=self._pid_sample_period.total_seconds() if self._pid_sample_period else None
         )
 
-        current_output = self.__round_to_target_precision(self._get_current_output())
+        current_output = self._round_to_target_precision(self._get_current_output())
         if current_output:
             self._pid.set_auto_mode(enabled=True, last_output=current_output)
         else:
@@ -521,7 +525,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                 return
             self._pid.output_limits = output_limits
 
-        current_output = self.__round_to_target_precision(self._get_current_output())
+        current_output = self._round_to_target_precision(self._get_current_output())
 
         if self._last_output is not None and self._last_output != current_output:
             _LOGGER.info("%s: %s - Target was changed manually from %s to %s - restarting PID regulator (%s)",
@@ -536,9 +540,9 @@ class AbstractPidController(AbstractController, abc.ABC):
         elif reason in (REASON_THERMOSTAT_SENSOR_CHANGED, REASON_PID_CONTROL):
             # Run PID only if static period configured or if sensor was changed.
 
-            output = self.__round_to_target_precision(float(self._pid(cur_temp)))
+            output = self._round_to_target_precision(float(self._pid(cur_temp)))
 
-            p, i, d = self._pid.components;
+            p, i, d = self._pid.components
 
             if current_output != output:
                 _LOGGER.debug("%s: %s - Current temp: %s -> %s, target: %s, limits: %s, adjusting from %s to %s (%s) (p:%f, i:%f, d:%f)",
@@ -600,9 +604,9 @@ class AbstractPidController(AbstractController, abc.ABC):
 
         return min_temp, max_temp
 
-    def __round_to_target_precision(self, value: float) -> float:
-        # FIXME: use target attr precision
-        return round(value, 1)
+    @abc.abstractmethod
+    def _round_to_target_precision(self, value: float) -> float:
+        """Round output to target precision"""
 
     @abc.abstractmethod
     def _get_current_output(self):
@@ -682,6 +686,13 @@ class NumberPidController(AbstractPidController):
             ATTR_ENTITY_ID: self._switch_entity_id
         }, context=self._context)
 
+    def _round_to_target_precision(self, value: float) -> float:
+        state: State = self._hass.states.get(self._target_entity_id)
+        if not state:
+            return value
+        step = state.attributes.get(ATTR_STEP)
+        return _round_step(value, step)
+
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)
         if state:
@@ -740,6 +751,13 @@ class ClimatePidController(AbstractPidController):
         if not state:
             return False
         return state.state == self.mode
+
+    def _round_to_target_precision(self, value: float) -> float:
+        state: State = self._hass.states.get(self._target_entity_id)
+        if not state:
+            return value
+        step = state.attributes.get(ATTR_TARGET_TEMP_STEP)
+        return _round_step(value, step)
 
     def _get_current_output(self):
         state = self._hass.states.get(self._target_entity_id)

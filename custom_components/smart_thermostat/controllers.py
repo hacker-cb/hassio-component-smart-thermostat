@@ -538,18 +538,22 @@ class AbstractPidController(AbstractController, abc.ABC):
 
             output = self.__round_to_target_precision(float(self._pid(cur_temp)))
 
+            p, i, d = self._pid.components;
+
             if current_output != output:
-                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, limits: %s, adjusting from %s to %s (%s)",
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target: %s, limits: %s, adjusting from %s to %s (%s) (p:%f, i:%f, d:%f)",
                               self._thermostat_entity_id, self.name,
                               self._last_current_value, cur_temp, target_temp, output_limits,
-                              current_output, output, reason
+                              current_output, output, reason,
+                              p, i, d
                               )
                 await self._apply_output(output)
             else:
-                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target temp: %s, limits: %s, no changes needed, output: %s (%s)",
+                _LOGGER.debug("%s: %s - Current temp: %s -> %s, target: %s, limits: %s, no changes needed, output: %s (%s) (p:%f, i:%f, d:%f)",
                               self._thermostat_entity_id, self.name,
                               self._last_current_value, cur_temp, target_temp, output_limits,
-                              current_output, reason
+                              current_output, reason,
+                              p, i, d
                               )
 
             self._last_output = output

@@ -686,6 +686,7 @@ class NumberPidController(AbstractPidController):
         state = self._hass.states.get(self._target_entity_id)
         if state:
             return float(state.state)
+        return None
 
     def _get_target_output_limits(self):
         min_temp, max_temp = (None, None)

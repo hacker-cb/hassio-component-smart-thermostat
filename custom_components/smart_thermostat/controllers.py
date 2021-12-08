@@ -196,7 +196,7 @@ class AbstractController(abc.ABC):
         #               )
 
         if not self.__running:
-            await self._async_ensure_is_off()
+            await self._async_ensure_not_running()
         else:
             await self._async_control(cur_temp, target_temp, time=time, force=force, reason=reason)
 
@@ -208,7 +208,7 @@ class AbstractController(abc.ABC):
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         """Control method. Should be overwritten in child classes"""
 
-    async def _async_ensure_is_off(self):
+    async def _async_ensure_not_running(self):
         """Ensure that target is off"""
 
 
@@ -266,7 +266,7 @@ class SwitchController(AbstractController):
     async def _async_stop(self):
         await self._async_turn_off(reason=REASON_THERMOSTAT_STOP)
 
-    async def _async_ensure_is_off(self):
+    async def _async_ensure_not_running(self):
         if self._is_on():
             await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
 
@@ -342,15 +342,15 @@ class AbstractPidController(AbstractController, abc.ABC):
             pid_sample_period: Optional[timedelta],
             inverted: bool,
             keep_alive: Optional[timedelta],
-            target_min: Optional[float],
-            target_max: Optional[float]
+            output_min: Optional[float],
+            output_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id, inverted, keep_alive)
         self._initial_pid_params = pid_params
         self._current_pid_params: Optional[PidParams] = None
         self._pid_sample_period = pid_sample_period
-        self._target_min = target_min
-        self._target_max = target_max
+        self._output_min = output_min
+        self._output_max = output_max
         self._pid: Optional[PID] = None
         self._auto_tune = False
         self._last_output: Optional[float] = None
@@ -461,7 +461,7 @@ class AbstractPidController(AbstractController, abc.ABC):
     def _setup_pid(self, cur_temp, target_temp):
         _ = cur_temp
 
-        output_limits = self._get_output_limits()
+        output_limits = self.__get_output_limits()
 
         if not self.__validate_output_limits(output_limits):
             return False
@@ -496,7 +496,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid = None
         self._last_output = None
 
-    async def _async_ensure_is_off(self):
+    async def _async_ensure_not_running(self):
         if self._is_on():
             await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
 
@@ -515,7 +515,7 @@ class AbstractPidController(AbstractController, abc.ABC):
                          )
             self._pid.setpoint = target_temp
 
-        output_limits = self._get_output_limits()
+        output_limits = self.__get_output_limits()
         if self._last_output_limits != output_limits:
             _LOGGER.info("%s: %s - Output limits were changed from %s to %s (%s)",
                          self._thermostat_entity_id, self.name,
@@ -576,33 +576,33 @@ class AbstractPidController(AbstractController, abc.ABC):
         else:
             return True
 
-    def _get_output_limits(self) -> (None, None):
-        output_limits = self._get_target_output_limits()
-        min_temp, max_temp = output_limits
+    def __get_output_limits(self) -> (None, None):
+        output_limits = self._get_output_limits()
+        min_limit, max_limit = output_limits
 
         # Override min/max values if provided in config
-        if self._target_min is not None:
-            if min_temp is not None and self._target_min < min_temp:
+        if self._output_min is not None:
+            if min_limit is not None and self._output_min < min_limit:
                 _LOGGER.warning("%s: %s - config min (%) < target min (%) - not adjusting",
                                 self._thermostat_entity_id,
                                 self.name,
-                                self._target_min,
-                                min_temp
+                                self._output_min,
+                                min_limit
                                 )
             else:
-                min_temp = self._target_min
-        if self._target_max is not None:
-            if max_temp is not None and self._target_max > max_temp:
+                min_limit = self._output_min
+        if self._output_max is not None:
+            if max_limit is not None and self._output_max > max_limit:
                 _LOGGER.warning("%s: %s - config max (%) > target max (%) - not adjusting",
                                 self._thermostat_entity_id,
                                 self.name,
-                                self._target_max,
-                                max_temp
+                                self._output_max,
+                                max_limit
                                 )
             else:
-                max_temp = self._target_max
+                max_limit = self._output_max
 
-        return min_temp, max_temp
+        return min_limit, max_limit
 
     @abc.abstractmethod
     def _round_to_target_precision(self, value: float) -> float:
@@ -621,7 +621,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Turn off target"""
 
     @abc.abstractmethod
-    def _get_target_output_limits(self) -> (None, None):
+    def _get_output_limits(self) -> (None, None):
         """Get output limits (min,max) in controller implementation"""
 
     @abc.abstractmethod
@@ -639,15 +639,15 @@ class NumberPidController(AbstractPidController):
             pid_sample_period: timedelta,
             inverted: bool,
             keep_alive: Optional[timedelta],
-            target_min: Optional[float],
-            target_max: Optional[float],
+            output_min: Optional[float],
+            output_max: Optional[float],
             switch_entity_id: str,
             switch_inverted: bool
     ):
         super().__init__(name, mode, target_entity_id,
                          pid_params, pid_sample_period,
                          inverted, keep_alive,
-                         target_min, target_max)
+                         output_min, output_max)
         self._switch_entity_id = switch_entity_id
         self._switch_inverted = switch_inverted
 
@@ -699,7 +699,7 @@ class NumberPidController(AbstractPidController):
             return float(state.state)
         return None
 
-    def _get_target_output_limits(self):
+    def _get_output_limits(self):
         min_temp, max_temp = (None, None)
 
         state: State = self._hass.states.get(self._target_entity_id)
@@ -730,13 +730,13 @@ class ClimatePidController(AbstractPidController):
             pid_sample_period: timedelta,
             inverted: bool,
             keep_alive: Optional[timedelta],
-            target_min: Optional[float],
-            target_max: Optional[float]
+            output_min: Optional[float],
+            output_max: Optional[float]
     ):
         super().__init__(name, mode, target_entity_id,
                          pid_params, pid_sample_period,
                          inverted, keep_alive,
-                         target_min, target_max)
+                         output_min, output_max)
 
     @property
     def working(self):
@@ -792,7 +792,7 @@ class ClimatePidController(AbstractPidController):
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
-    def _get_target_output_limits(self) -> (None, None):
+    def _get_output_limits(self) -> (None, None):
         min_temp = None
         max_temp = None
 

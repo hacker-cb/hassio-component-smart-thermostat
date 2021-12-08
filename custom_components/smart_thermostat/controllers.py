@@ -448,13 +448,10 @@ class AbstractPidController(AbstractController, abc.ABC):
     def _is_on(self):
         """Is turned on"""
 
-    @final
     async def _async_start(self, cur_temp, target_temp) -> bool:
         return self._setup_pid(cur_temp, target_temp)
 
-    @final
     async def _async_stop(self):
-        await self._async_turn_off(REASON_THERMOSTAT_STOP)
         self._reset_pid()
         self._last_current_value = None
 
@@ -499,11 +496,9 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
+            # This should really never happens
             _LOGGER.error("%s: %s - No PID", self._thermostat_entity_id, self.name)
             return
-
-        if not self._is_on() or reason == REASON_KEEP_ALIVE:
-            await self._async_turn_on(reason=reason)
 
         if self._pid.setpoint != target_temp:
             _LOGGER.info("%s: %s - Target setpoint was changed from %s to %s (%s)",
@@ -610,14 +605,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         """Get current output"""
 
     @abc.abstractmethod
-    async def _async_turn_on(self, reason=None):
-        """Turn on target"""
-
-    @abc.abstractmethod
-    async def _async_turn_off(self, reason):
-        """Turn off target"""
-
-    @abc.abstractmethod
     def _get_output_limits(self) -> (None, None):
         """Get output limits (min,max) in controller implementation"""
 
@@ -655,6 +642,9 @@ class NumberPidController(AbstractPidController):
 
     @property
     def working(self):
+        # We don't have any information is real heater/cooler working now
+        # So we just return switch state
+        # TODO: Add optional binary sensor which will indicate real operating status of the target
         return self._is_on()
 
     def _is_on(self):
@@ -682,6 +672,10 @@ class NumberPidController(AbstractPidController):
         await self._hass.services.async_call(HA_DOMAIN, service, {
             ATTR_ENTITY_ID: self._switch_entity_id
         }, context=self._context)
+
+    async def _async_stop(self):
+        await super()._async_stop()
+        await self._async_turn_off(REASON_THERMOSTAT_STOP)
 
     async def _async_ensure_not_running(self):
         if self._is_on():
@@ -719,6 +713,11 @@ class NumberPidController(AbstractPidController):
                 ATTR_VALUE: output
             }, context=self._context
         )
+
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
+        if not self._is_on() or reason == REASON_KEEP_ALIVE:
+            await self._async_turn_on(reason=reason)
+        await super()._async_control(cur_temp, target_temp, time, force, reason)
 
 
 class ClimatePidController(AbstractPidController):
@@ -793,6 +792,10 @@ class ClimatePidController(AbstractPidController):
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
 
+    async def _async_stop(self):
+        await super()._async_stop()
+        await self._async_turn_off(REASON_THERMOSTAT_STOP)
+
     async def _async_ensure_not_running(self):
         if self._is_on():
             await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
@@ -815,3 +818,8 @@ class ClimatePidController(AbstractPidController):
                 ATTR_TEMPERATURE: output
             }, context=self._context
         )
+
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
+        if not self._is_on() or reason == REASON_KEEP_ALIVE:
+            await self._async_turn_on(reason=reason)
+        await super()._async_control(cur_temp, target_temp, time, force, reason)

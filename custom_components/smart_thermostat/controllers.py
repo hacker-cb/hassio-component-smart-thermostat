@@ -558,13 +558,13 @@ class AbstractPidController(AbstractController, abc.ABC):
             self._last_current_value = cur_temp
 
     def __validate_output_limits(self, output_limits: (None, None)) -> bool:
-        min_temp, max_temp = output_limits
+        min_output, max_output = output_limits
 
-        if not min_temp or not max_temp:
+        if None in (min_output, max_output):
             _LOGGER.error(
                 "%s: %s - Invalid output limits: (%s, %s)",
                 self._thermostat_entity_id, self.name,
-                min_temp, max_temp
+                min_output, max_output
             )
             return False
         else:

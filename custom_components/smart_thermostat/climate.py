@@ -723,6 +723,9 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             new_hvac_action = self._hvac_action
 
+            if self._hvac_mode == HVAC_MODE_OFF:
+                new_hvac_action = CURRENT_HVAC_IDLE
+
             if None not in (cur_temp, target_temp):
 
                 too_cold = cur_temp <= target_temp - self._heat_cool_cold_tolerance

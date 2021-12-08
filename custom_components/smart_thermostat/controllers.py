@@ -208,6 +208,7 @@ class AbstractController(abc.ABC):
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         """Control method. Should be overwritten in child classes"""
 
+    @abc.abstractmethod
     async def _async_ensure_not_running(self):
         """Ensure that target is off"""
 
@@ -496,10 +497,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._pid = None
         self._last_output = None
 
-    async def _async_ensure_not_running(self):
-        if self._is_on():
-            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
-
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
             _LOGGER.error("%s: %s - No PID", self._thermostat_entity_id, self.name)
@@ -686,6 +683,10 @@ class NumberPidController(AbstractPidController):
             ATTR_ENTITY_ID: self._switch_entity_id
         }, context=self._context)
 
+    async def _async_ensure_not_running(self):
+        if self._is_on():
+            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
+
     def _round_to_target_precision(self, value: float) -> float:
         state: State = self._hass.states.get(self._target_entity_id)
         if not state:
@@ -791,6 +792,10 @@ class ClimatePidController(AbstractPidController):
         await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_OFF, {
             ATTR_ENTITY_ID: self._target_entity_id
         }, context=self._context)
+
+    async def _async_ensure_not_running(self):
+        if self._is_on():
+            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
 
     def _get_output_limits(self) -> (None, None):
         min_temp = None

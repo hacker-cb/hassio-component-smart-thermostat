@@ -107,7 +107,7 @@ class AbstractController(abc.ABC):
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         return None
 
-    async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
+    async def async_added_to_hass(self, hass: HomeAssistant, attrs: Mapping[str, Any]):
         """Will be called in Entity async_added_to_hass()"""
         self._hass = hass
 
@@ -132,6 +132,11 @@ class AbstractController(abc.ABC):
     @abc.abstractmethod
     def working(self):
         """Is target working now?"""
+
+    def get_unique_id(self):
+        """Get unique ID, for attrs storage"""
+        name = "ctrl_" + split_entity_id(self._target_entity_id)[1]
+        return name
 
     def get_used_entity_ids(self) -> [str]:
         """Get all used entity IDs to subscribe state change on them"""
@@ -359,20 +364,19 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._last_current_value = None
 
     @final
-    async def async_added_to_hass(self, hass: HomeAssistant, old_state: State):
-        await super().async_added_to_hass(hass, old_state)
+    async def async_added_to_hass(self, hass: HomeAssistant, attrs: Mapping[str, Any]):
+        await super().async_added_to_hass(hass, attrs)
 
         if self._auto_tune:
-            if old_state is not None and old_state.attributes.get(ATTR_PID_PARAMS) is not None:
-                saved_pid_params = old_state.attributes.get(ATTR_PID_PARAMS)
-                if saved_pid_params:
-                    kp, ki, kd = saved_pid_params.split(',')
-                    self._current_pid_params = PidParams(kp, ki, kd)
-                    _LOGGER.info("%s: %s - restored last tuned PID params: %s",
-                                 self._thermostat_entity_id,
-                                 self.name,
-                                 self._current_pid_params
-                                 )
+            saved_pid_params = attrs.get(ATTR_PID_PARAMS, None)
+            if saved_pid_params:
+                kp, ki, kd = saved_pid_params.split(',')
+                self._current_pid_params = PidParams(kp, ki, kd)
+                _LOGGER.info("%s: %s - restored last tuned PID params: %s",
+                             self._thermostat_entity_id,
+                             self.name,
+                             self._current_pid_params
+                             )
             raise NotImplementedError(f"Auto-tuning PID params unsupported now")
         else:
             if self._initial_pid_params:
@@ -401,13 +405,11 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
-        if not self._auto_tune:
-            return None
-
-        p = self._current_pid_params
-        return {
-            ATTR_PID_PARAMS: f"{p.kp},{p.ki},{p.kd}" if p else None
-        }
+        attrs = {}
+        if self._auto_tune and self._current_pid_params:
+            p = self._current_pid_params
+            attrs[ATTR_PID_PARAMS] = f"{p.kp},{p.ki},{p.kd}"
+        return attrs
 
     @final
     def set_pid_params(self, pid_params: PidParams, reason=None):

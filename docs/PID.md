@@ -47,9 +47,21 @@ pid_sample_period: 00:00:05
 pid_params = 0.1, 0.001, 0
 ```
 
-
 First graph is floor temperature, second is room temperature.
 
 You can see on the graph, that after few hours room temperature was stabilized on setpoint `23.5`:
 
-![](docs/images/pid_example_1.png)
+![](images/pid_example_1.png)
+
+### PWM PID regulation case: _water heating floor (PWM mode)_
+
+* Valve for heating floor collector with _open time around 3 mins and close time around 2 mins_. It is visible as `switch` entity in Home Assistant.
+* DS18B20 sensor inside heating floor connected to ESPHome, with scan period 10 seconds.
+
+```
+pid_params: 10, 0.004, 0
+pid_sample_period: "00:00:05"
+pwm_period: "00:05:00"
+```
+
+![](images/pid_example_2.png)

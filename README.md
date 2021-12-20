@@ -4,7 +4,7 @@ Thermostat was designed to control different kind of entities (not only switchab
 
 ### Supported domains and modes for heaters and coolers:
 
-* `switch`, `input_boolean` - Basic on/off like [generic_thermostat].
+* `switch`, `input_boolean` - Basic on/off like [generic_thermostat] or PWM mode.
 * `climate` - PID regulator.
 * `number`, `input_number` -  PID regulator (additional switch is required).
 
@@ -14,7 +14,7 @@ Thermostat was designed to control different kind of entities (not only switchab
 * Supports `heat_cool` mode.
 * Supports `away` mode.
 * Supports invert logic of the heater/cooler.
-* Protection if target sensor does not report values for period of time.
+* Protection if target sensor does not report values for period of time (`sensor_stale_duration`).
 
 ## Installation (Manual)
 
@@ -59,7 +59,7 @@ climate:
 * `cooler` _(Optional)_ - String, Array or Map of the coolers.
 * `heater` _(Optional)_ - String, Array or Map of the heaters.
 * `target_sensor` _(Required)_ - Target temperature sensor
-* `sensor_stale_duration` _(Optional)_ - Thermostat will stop all controller
+* `sensor_stale_duration` _(Optional)_ - Thermostat will stop all controllers if no data received from sensor during this period.
 * `min_temp` _(Optional, default=7)_ - Set minimum set point available.
 * `max_temp` _(Optional, default=35)_ - Set maximum set point available.
 * `away_temp` _(Optional)_ - Temperature used by the `away` mode. If this is not specified, the preset mode feature will not be available.
@@ -77,8 +77,8 @@ Initial HVAC mode can be set via `initial_hvac_mode` config option.
 
 Thermostat behavior will depend on active HVAC mode. HVAC mode can be set in UI. 
 
-_NOTE: Smart thermostat will always take full control of the heaters/coolers. 
-So it will turn them on/off back if you change their states manually_
+_**NOTE: Smart thermostat will always take full control of the heaters/coolers. 
+So it will turn them on/off back if you change their states manually**_
 
 ### HVAC_MODE = `heat`
 _NOTE: available if at least one `CONFIG.heater` was defined._

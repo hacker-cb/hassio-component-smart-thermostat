@@ -1,6 +1,8 @@
 import abc
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
+from homeassistant.util import dt as dt_util
+
 from typing import Optional, final, Mapping, Any
 
 from simple_pid import PID
@@ -30,6 +32,13 @@ REASON_THERMOSTAT_NOT_RUNNING = "not_running"
 REASON_CONTROL_ENTITY_CHANGED = "control_entity_changed"
 REASON_KEEP_ALIVE = "keep_alive"
 REASON_PID_CONTROL = "pid_control"
+REASON_PWM_CONTROL = "pwm_control"
+
+PWM_SWITCH_ATTR_PWM_VALUE = "pwm_value"
+PWM_SWITCH_ATTR_LAST_CONTROL_TIME = "last_control_time"
+PWM_SWITCH_ATTR_LAST_CONTROL_STATE = "last_control_state"
+PWM_SWITCH_MIN_VALUE = 0
+PWM_SWITCH_MAX_VALUE = 100
 
 
 def _round_step(value: float, step: float):
@@ -363,7 +372,6 @@ class AbstractPidController(AbstractController, abc.ABC):
         self._last_output_limits: None
         self._last_current_value = None
 
-    @final
     async def async_added_to_hass(self, hass: HomeAssistant, attrs: Mapping[str, Any]):
         await super().async_added_to_hass(hass, attrs)
 
@@ -406,7 +414,7 @@ class AbstractPidController(AbstractController, abc.ABC):
     @property
     def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
         attrs = {}
-        if self._auto_tune and self._current_pid_params:
+        if self._current_pid_params:
             p = self._current_pid_params
             attrs[ATTR_PID_PARAMS] = f"{p.kp},{p.ki},{p.kd}"
         return attrs
@@ -498,7 +506,7 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
         if not self._pid:
-            # This should really never happens
+            # This should really never happen
             _LOGGER.error("%s: %s - No PID", self._thermostat_entity_id, self.name)
             return
 
@@ -613,6 +621,215 @@ class AbstractPidController(AbstractController, abc.ABC):
     @abc.abstractmethod
     async def _apply_output(self, output: float):
         """Apply output to target"""
+
+
+class PwmSwitchPidController(AbstractPidController):
+    def __init__(
+            self,
+            name: str,
+            mode,
+            target_entity_id: str,
+            pid_params: PidParams,
+            pid_sample_period: timedelta,
+            inverted: bool,
+            keep_alive: Optional[timedelta],
+            pwm_period: timedelta,
+    ):
+        super().__init__(name, mode, target_entity_id,
+                         pid_params, pid_sample_period,
+                         inverted, keep_alive,
+                         None, None  # No config options. static values are PWM_SWITCH_MIN_VALUE/PWM_SWITCH_MAX_VALUE
+                         )
+        self._pwm_period = pwm_period
+        self._pwm_value: Optional[int] = None
+        target_entity_name = split_entity_id(target_entity_id)[1]
+        self._pwm_value_attr_name = target_entity_name + PWM_SWITCH_ATTR_PWM_VALUE
+
+        self._pwm_control_period = self._pwm_period / PWM_SWITCH_MAX_VALUE
+
+        if self._pwm_control_period < timedelta(seconds=1):
+            self._pwm_control_period = timedelta(seconds=1)
+
+        self._last_control_time: Optional[datetime] = None
+        self._last_control_state: Optional[str] = None
+
+    async def async_added_to_hass(self, hass: HomeAssistant, attrs: Mapping[str, Any]):
+        await super().async_added_to_hass(hass, attrs)
+
+        pwm_value = attrs.get(PWM_SWITCH_ATTR_PWM_VALUE, None)
+        if pwm_value is not None:
+            self._pwm_value = self._round_to_target_precision(pwm_value)
+
+        last_control_time = attrs.get(PWM_SWITCH_ATTR_LAST_CONTROL_TIME, None)
+        if last_control_time is not None:
+            self._last_control_time = dt_util.parse_datetime(last_control_time)
+
+        self._last_control_state = attrs.get(PWM_SWITCH_ATTR_LAST_CONTROL_STATE, None)
+
+        if self._pwm_value is None:
+            # Apply default output value
+            output = int((PWM_SWITCH_MIN_VALUE + PWM_SWITCH_MAX_VALUE) / 2)
+            await self._apply_output(output)
+
+        _LOGGER.info("%s: %s - Setting up PWM switch. PWM value: %s, period: %s, last control: [state: %s, time: %s], check PWM control every %s",
+                     self._thermostat_entity_id,
+                     self.name,
+                     self._pwm_value,
+                     self._pwm_period,
+                     self._last_control_state,
+                     self._last_control_time,
+                     self._pwm_control_period
+                     )
+        self._thermostat.async_on_remove(
+            async_track_time_interval(
+                self._hass, self._async_pwm_control, self._pwm_control_period
+            )
+        )
+
+    @property
+    def extra_state_attributes(self) -> Optional[Mapping[str, Any]]:
+        attrs = super().extra_state_attributes or {}
+
+        if None not in (self._last_control_time, self._last_control_state):
+            attrs.update({
+                PWM_SWITCH_ATTR_LAST_CONTROL_TIME: self._last_control_time.replace(microsecond=0),
+                PWM_SWITCH_ATTR_LAST_CONTROL_STATE: self._last_control_state
+            })
+
+        if self._pwm_value is not None:
+            attrs[PWM_SWITCH_ATTR_PWM_VALUE] = self._pwm_value
+
+        return attrs
+
+    async def _async_pwm_control(self, time=None):
+        await self.async_control(time=time, reason=REASON_PWM_CONTROL)
+
+    @property
+    def working(self):
+        return self._is_on()
+
+    def _is_on(self):
+        return self._hass.states.is_state(
+            self._target_entity_id,
+            STATE_ON if not self._inverted else STATE_OFF
+        )
+
+    async def _async_turn_on(self, reason):
+        _LOGGER.info("%s: %s - Turning on PWM switch %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
+        service = SERVICE_TURN_ON if not self._inverted else SERVICE_TURN_OFF
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
+
+    async def _async_turn_off(self, reason):
+        _LOGGER.info("%s: %s - Turning off PWM switch %s (%s)",
+                     self._thermostat_entity_id,
+                     self.name, self._target_entity_id, reason)
+
+        service = SERVICE_TURN_OFF if not self._inverted else SERVICE_TURN_ON
+        await self._hass.services.async_call(HA_DOMAIN, service, {
+            ATTR_ENTITY_ID: self._target_entity_id
+        }, context=self._context)
+
+    async def _async_stop(self):
+        await self._async_turn_off(reason=REASON_THERMOSTAT_STOP)
+        await super()._async_stop()
+
+    async def _async_ensure_not_running(self):
+        if self._is_on():
+            await self._async_turn_off(REASON_THERMOSTAT_NOT_RUNNING)
+
+    def _round_to_target_precision(self, value: float) -> float:
+        # PWM value always int
+        return int(value)
+
+    def _get_output_limits(self) -> (None, None):
+        return PWM_SWITCH_MIN_VALUE, PWM_SWITCH_MAX_VALUE
+
+    def _get_current_output(self):
+        return self._pwm_value
+
+    async def _apply_output(self, output: float):
+        if self._pwm_value != output:
+            self._pwm_value = output
+            self._thermostat.async_write_ha_state()
+
+    async def _async_control(self, cur_temp, target_temp, time=None, force=False, reason=None):
+        await super()._async_control(cur_temp, target_temp, time, force, reason)
+
+        if self._last_control_state:
+            # Check real state is correct or keepalive requested
+            if self._last_control_state == STATE_ON and (reason == REASON_KEEP_ALIVE or not self._is_on()):
+                _LOGGER.debug("%s: %s Force ON (%s)", self._thermostat_entity_id, self.name, reason)
+                await self._async_turn_on(reason=reason)
+            elif self._last_control_state == STATE_OFF and (reason == REASON_KEEP_ALIVE or self._is_on()):
+                _LOGGER.debug("%s: %s Force OFF (%s)", self._thermostat_entity_id, self.name, reason)
+                await self._async_turn_off(reason=reason)
+
+        elif self._is_on():
+            # no _last_control_state - should be always off
+            await self._async_turn_off(reason=reason)
+
+        if reason == REASON_PWM_CONTROL:
+            await self._pwm_control(reason=reason)
+
+    async def _pwm_control(self, reason):
+        if self._pwm_value is None:
+            # This should really never happen
+            _LOGGER.error("%s: %s - No PWM value (%s)", self._thermostat_entity_id, self.name, reason)
+            return
+
+        new_state = None  # will be applied if not None
+
+        pwm_on_duration: timedelta = self._pwm_period * self._pwm_value / PWM_SWITCH_MAX_VALUE
+        pwm_off_duration: timedelta = self._pwm_period - pwm_on_duration
+
+        need_to_wait = None
+
+        if None in (self._last_control_state, self._last_control_time):
+            # Start with ON state
+            new_state = STATE_ON
+        else:
+            now = dt_util.now().replace(microsecond=0)
+
+            if self._last_control_state == STATE_ON and pwm_off_duration.total_seconds() > 0:
+                if now >= (self._last_control_time + pwm_on_duration):
+                    new_state = STATE_OFF
+                else:
+                    need_to_wait = self._last_control_time + pwm_on_duration - now
+
+            elif self._last_control_state == STATE_OFF and pwm_on_duration.total_seconds() > 0:
+                if now >= (self._last_control_time + pwm_off_duration):
+                    new_state = STATE_ON
+                else:
+                    need_to_wait = self._last_control_time + pwm_off_duration - now
+
+        change_info = f"`{self._last_control_state}` -> `{new_state}`" \
+            if new_state \
+            else f"`{self._last_control_state}` - wait {need_to_wait}"
+
+        _LOGGER.debug("%s: %s - PWM value: %s, last: {state: %s, time: %s}, dur: {on: %s, off: %s}: state: {%s} ",
+                      self._thermostat_entity_id, self.name,
+                      self._pwm_value,
+                      self._last_control_state,
+                      self._last_control_time,
+                      pwm_on_duration, pwm_off_duration,
+                      change_info
+                      )
+
+        # Save last control params
+        if new_state:
+            self._last_control_time = dt_util.now().replace(microsecond=0)
+            self._last_control_state = new_state
+            self._thermostat.async_write_ha_state()
+
+            if new_state == STATE_ON:
+                await self._async_turn_on(reason=reason)
+            elif new_state == STATE_OFF:
+                await self._async_turn_off(reason=reason)
 
 
 class NumberPidController(AbstractPidController):

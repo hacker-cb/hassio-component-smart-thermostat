@@ -191,6 +191,32 @@ Domains: `switch`,`input_boolean`
 * No `entity_id` changes will be performed if config `min_cycle_duration` was set and enough time was not passed since last switch.
 * Behavior on/off will be inverted if `inverted` config option was set to `true`
 
+### PWM Switch PID controller
+
+Domains: `switch`,`input_boolean`.
+
+* Internal PID limits are integers, defined as constants `PWM_SWITCH_MIN_VALUE` and `PWM_SWITCH_MAX_VALUE` (0, 100).
+  So, you must use this limits when tuning `pid_params` terms. 
+
+#### Config options
+
+* `entity_id` _(Required)_ - Target entity ID.
+* `inverted` _(Optional, default=false)_ - Need to invert `entity_id` logic.
+* `keep_alive` _(Optional)_ - Send keep-alive interval. Use with heaters, coolers,  A/C units that shut off if they don’t receive a signal from their remote for a while. 
+* `pid_params` _(Required)_ - PID params comma-separated string or array in the format `Kp, Ki, Kd` (_Always positive, will be inverted internally for cool mode_).
+* `pid_sample_period` _(Optional)_ - PID constant sample time period.
+* `pwm_period`  _(Required)_ - PWM period. Switch will be turned on and turned off according internal PID output once in this period.  
+
+#### Behavior
+
+* PID output will be calculated internally based on provided `pid_params`.
+* `pwm_period` will be separated to two parts: `ON` and `OFF`. Each part duration will depend on PID output. 
+* PWM on/off need will be checked every `pwm_period/100` time **but not often than each 1 second**. (`PWM_SWITCH_MAX_VALUE` internal const variable)
+* Behavior on/off will be inverted if `inverted` config option was set to `true`.
+* It is keep on/off state duration before Home Assistant restart. Last change time is saved in thermostat state attributes.
+
+NOTE: This mode will be set if entity domain is one of the listed above and `pid_params` config entry is present.
+
 ### Climate controller (PID mode supported)
 
 Domains: `climate`

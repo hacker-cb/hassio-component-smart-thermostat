@@ -53,7 +53,8 @@ from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
 from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, ClimatePidController, REASON_THERMOSTAT_FIRST_RUN, \
-    REASON_THERMOSTAT_HVAC_MODE_CHANGED, REASON_THERMOSTAT_TARGET_TEMP_CHANGED, REASON_THERMOSTAT_SENSOR_CHANGED, REASON_CONTROL_ENTITY_CHANGED
+    REASON_THERMOSTAT_HVAC_MODE_CHANGED, REASON_THERMOSTAT_TARGET_TEMP_CHANGED, REASON_THERMOSTAT_SENSOR_CHANGED, REASON_CONTROL_ENTITY_CHANGED, \
+    PwmSwitchPidController
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,6 +87,8 @@ CONF_PID_MIN = "min"
 CONF_PID_MAX = "max"
 CONF_PID_SWITCH_ENTITY_ID = "switch_entity_id"
 CONF_PID_SWITCH_INVERTED = "switch_inverted"
+CONF_PWM_SWITCH_PERIOD = "pwm_period"
+
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
 
@@ -128,6 +131,12 @@ TARGET_SCHEMA_PID_REGULATOR_COMMON = TARGET_SCHEMA_COMMON.extend({
     vol.Optional(CONF_PID_MAX, default=None): vol.Any(None, vol.Coerce(float))
 })
 
+TARGET_SCHEMA_PID_REGULATOR_PWM_SWITCH = TARGET_SCHEMA_PID_REGULATOR_COMMON.extend({
+    vol.Required(CONF_PID_PARAMS): _cv_pid_params_list,
+    vol.Optional(CONF_PID_SAMPLE_PERIOD, default=None): vol.Any(None, cv.positive_time_period),
+    vol.Required(CONF_PWM_SWITCH_PERIOD): cv.positive_time_period
+})
+
 TARGET_SCHEMA_PID_REGULATOR_CLIMATE = TARGET_SCHEMA_PID_REGULATOR_COMMON.extend({
 })
 
@@ -156,7 +165,10 @@ def _cv_controller_target(cfg: Any) -> Any:
     cfg = _cv_min_max_check(cfg)
 
     if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
-        return TARGET_SCHEMA_SWITCH(cfg)
+        if CONF_PID_PARAMS in cfg:
+            return TARGET_SCHEMA_PID_REGULATOR_PWM_SWITCH(cfg)
+        else:
+            return TARGET_SCHEMA_SWITCH(cfg)
     elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
         return TARGET_SCHEMA_PID_REGULATOR_NUMBER(cfg)
     elif domain in [CLIMATE_DOMAIN]:
@@ -227,40 +239,54 @@ def _create_controllers(
         controller = None
 
         if domain in [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN]:
-            min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
-            cold_tolerance = conf[CONF_COLD_TOLERANCE]
-            hot_tolerance = conf[CONF_HOT_TOLERANCE]
+            if CONF_PID_PARAMS in conf:
+                pid_params = conf[CONF_PID_PARAMS]
 
-            if cold_tolerance < heat_cool_cold_tolerance:
-                _LOGGER.warning(
-                    "cold_tolerance (%s) < heat_cool_cold_tolerance (%s). "
-                    "%s will be enabled in heat/cool mode based on heat_cool_cold_tolerance (entity_id: %s).",
+                controller = PwmSwitchPidController(
+                    name,
+                    mode,
+                    entity_id,
+                    PidParams(pid_params[0], pid_params[1], pid_params[2]),
+                    conf[CONF_PID_SAMPLE_PERIOD],
+                    inverted,
+                    keep_alive,
+                    conf[CONF_PWM_SWITCH_PERIOD]
+                )
+            else:
+                min_duration = conf[CONF_MIN_DUR] if CONF_MIN_DUR in conf else None
+                cold_tolerance = conf[CONF_COLD_TOLERANCE]
+                hot_tolerance = conf[CONF_HOT_TOLERANCE]
+
+                if cold_tolerance < heat_cool_cold_tolerance:
+                    _LOGGER.warning(
+                        "cold_tolerance (%s) < heat_cool_cold_tolerance (%s). "
+                        "%s will be enabled in heat/cool mode based on heat_cool_cold_tolerance (entity_id: %s).",
+                        cold_tolerance,
+                        heat_cool_cold_tolerance,
+                        name,
+                        entity_id
+                    )
+
+                if hot_tolerance < heat_cool_hot_tolerance:
+                    _LOGGER.warning(
+                        "hot_tolerance (%s) < heat_cool_hot_tolerance (%s). "
+                        "%s will be enabled in heat/cool mode based on heat_cool_hot_tolerance (entity_id: %s).",
+                        hot_tolerance,
+                        heat_cool_hot_tolerance,
+                        name,
+                        entity_id
+                    )
+
+                controller = SwitchController(
+                    name,
+                    mode,
+                    entity_id,
                     cold_tolerance,
-                    heat_cool_cold_tolerance,
-                    name,
-                    entity_id
-                )
-
-            if hot_tolerance < heat_cool_hot_tolerance:
-                _LOGGER.warning(
-                    "hot_tolerance (%s) < heat_cool_hot_tolerance (%s). "
-                    "%s will be enabled in heat/cool mode based on heat_cool_hot_tolerance (entity_id: %s).",
                     hot_tolerance,
-                    heat_cool_hot_tolerance,
-                    name,
-                    entity_id
+                    inverted,
+                    keep_alive,
+                    min_duration
                 )
-
-            controller = SwitchController(
-                name,
-                mode,
-                entity_id,
-                cold_tolerance,
-                hot_tolerance,
-                inverted,
-                keep_alive,
-                min_duration
-            )
 
         elif domain in [INPUT_NUMBER_DOMAIN, NUMBER_DOMAIN]:
             pid_params = conf[CONF_PID_PARAMS]
@@ -442,7 +468,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             )
         )
 
-        old_state = await self.async_get_last_state();
+        old_state = await self.async_get_last_state()
 
         for controller in self._controllers:
             attrs = old_state.attributes.get(controller.get_unique_id(), {})

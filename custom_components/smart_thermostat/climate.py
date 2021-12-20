@@ -471,7 +471,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         old_state = await self.async_get_last_state()
 
         for controller in self._controllers:
-            attrs = old_state.attributes.get(controller.get_unique_id(), {})
+            attrs = old_state.attributes.get(controller.get_unique_id(), {}) if old_state else  {}
 
             await controller.async_added_to_hass(self.hass, attrs)
 

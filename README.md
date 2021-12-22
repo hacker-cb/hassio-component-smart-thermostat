@@ -1,4 +1,4 @@
-# Smart Thermostat with auto Heat/Cool mode and PID control support (Home Assistant component)
+# Smart Thermostat with auto Heat/Cool mode, PID control and PWM (Home Assistant component)
 
 Thermostat was designed to control different kind of entities (not only switchable like in [generic_thermostat]).
 

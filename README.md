@@ -16,7 +16,19 @@ Thermostat was designed to control different kind of entities (not only switchab
 * Supports invert logic of the heater/cooler.
 * Protection if target sensor does not report values for period of time (`sensor_stale_duration`).
 
+## Installation (via HACS)
+
+This is recommended way, which will handle one-click upgrade in HACS.
+
+1. Install [hacs] if it is not installed.
+2. Open HACS -> Integrations. Click 3 dots in the upper right corner.
+3. Click Custom repositories.
+4. Add `https://github.com/jethome-ru/hassio-component-smart-thermostat` repository.
+5. Find `Smart Thermostat with auto Heat/Cool modes and PID control support` and click install button.
+
 ## Installation (Manual)
+
+NOTE: This is not recommended way, because you will need to upgrade component manually. 
 
 1. Copy `/custom_components/smart_thermostat` to your `<config_dir>/custom_components/` directory.
 
@@ -231,5 +243,6 @@ logger:
    * The log file can also be found at `/<config_dir>/home-assistant.log`
    
 
-[generic_thermostat]: https://www.home-assistant.io/integrations/generic_thermostat/]
-[General PID explanation](docs/PID.md)
+[generic_thermostat]: https://www.home-assistant.io/integrations/generic_thermostat/
+[hacs]: https://hacs.xyz
+[General PID explanation]: (docs/PID.md)

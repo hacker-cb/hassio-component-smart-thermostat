@@ -1,11 +1,13 @@
-## General PID explanation
+# General PID explanation
 
-### PID parameters
+## Glossary
 
 * **Error**
 
   Difference between setpoint and current measured temperature. For example, if setpoint is `25.0` and current temperature is `23.8`, error is `1.2`. 
 
+
+## PID parameters
 
 * **P - Proportional term.**
 
@@ -24,7 +26,7 @@
 
   Usually not need in high inertia system like room heating/cooling.
 
-### Tuning PID parameters
+## Tuning PID parameters
 
 1. First start with some small `P`. Set `I` and `D` to 0.
 2. Wait some time and check history graph. You should get **stable** `sin()` form on the `target_sensor` graph.
@@ -34,7 +36,7 @@
 
 NOTE: **Be ready to spend 1-2 days during tuning** high inertia system, like water-heating floor. Be patient and final result will be amazing! :)
 
-### PID regulation case: _water heating floor + room sensor_ 
+## PID regulation case: _water heating floor + room sensor_ 
 
 * Heating floor has **very high inertia**.
 * We have external heating floor thermostat, which was added to `HA` with climate domain. 
@@ -53,7 +55,7 @@ You can see on the graph, that after few hours room temperature was stabilized o
 
 ![](images/pid_example_1.png)
 
-### PWM PID regulation case: _water heating floor (PWM mode)_
+## PWM PID regulation case: _water heating floor (PWM mode)_
 
 * Valve for heating floor collector with _open time around 3 mins and close time around 2 mins_. It is visible as `switch` entity in Home Assistant.
 * DS18B20 sensor inside heating floor connected to ESPHome, with scan period 10 seconds.

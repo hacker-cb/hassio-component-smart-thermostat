@@ -409,6 +409,8 @@ class AbstractPidController(AbstractController, abc.ABC):
 
     @final
     async def __async_pid_control(self, time=None):
+        if not self.running:
+            return
         await self.async_control(time=time, reason=REASON_PID_CONTROL)
 
     @property
@@ -702,6 +704,8 @@ class PwmSwitchPidController(AbstractPidController):
         return attrs
 
     async def _async_pwm_control(self, time=None):
+        if not self.__running:
+            return
         await self.async_control(time=time, reason=REASON_PWM_CONTROL)
 
     @property

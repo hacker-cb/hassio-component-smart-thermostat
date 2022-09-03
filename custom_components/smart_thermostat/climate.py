@@ -93,6 +93,10 @@ SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
 
 
+#
+ATTR_LAST_ASYNC_CONTROL_HVAC_MODE = "async_control_hvac_mode"
+
+
 def _cv_pid_params_list(value: Any) -> list:
     value = cv.ensure_list_csv(value)
     if len(value) != 3:
@@ -423,6 +427,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._controllers = controllers
         self.sensor_entity_id = sensor_entity_id
         self._hvac_mode = initial_hvac_mode
+        self._last_async_control_hvac_mode = None
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
         self._hvac_list = [HVAC_MODE_OFF]
@@ -526,6 +531,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 self._attr_preset_mode = old_state.attributes.get(ATTR_PRESET_MODE)
             if not self._hvac_mode and old_state.state:
                 self._hvac_mode = old_state.state
+            self._last_async_control_hvac_mode = old_state.attributes.get(ATTR_LAST_ASYNC_CONTROL_HVAC_MODE)
 
         else:
             # No previous state, try and restore defaults
@@ -641,6 +647,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             extra_controller_attrs = controller.extra_state_attributes
             if extra_controller_attrs:
                 attrs[controller.get_unique_id()] = extra_controller_attrs
+        attrs[ATTR_LAST_ASYNC_CONTROL_HVAC_MODE] = self._last_async_control_hvac_mode
         return attrs
 
     async def async_set_hvac_mode(self, hvac_mode):
@@ -749,6 +756,12 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
             new_hvac_action = self._hvac_action
 
+            if self._last_async_control_hvac_mode != self._hvac_mode:
+                _LOGGER.info("%s: mode changed: %s -> %s", self.entity_id, self._last_async_control_hvac_mode, self._hvac_mode)
+            elif self._hvac_mode == HVAC_MODE_OFF:
+                # Skip control, last `OFF` was already processed
+                return
+
             if self._hvac_mode == HVAC_MODE_OFF:
                 new_hvac_action = CURRENT_HVAC_IDLE
 
@@ -818,6 +831,8 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             # Call async_control() on running controllers
             for controller in self._controllers:
                 await controller.async_control(time=time, force=force, reason=reason)
+
+            self._last_async_control_hvac_mode = self._hvac_mode
 
     @property
     def supported_features(self):

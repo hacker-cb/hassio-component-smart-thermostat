@@ -704,7 +704,7 @@ class PwmSwitchPidController(AbstractPidController):
         return attrs
 
     async def _async_pwm_control(self, time=None):
-        if not self.__running:
+        if not self.running:
             return
         await self.async_control(time=time, reason=REASON_PWM_CONTROL)
 

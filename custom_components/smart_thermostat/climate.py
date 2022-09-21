@@ -80,6 +80,7 @@ CONF_HEAT_COOL_HOT_TOLERANCE = "heat_cool_hot_tolerance"
 CONF_KEEP_ALIVE = "keep_alive"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
+CONF_HEAT_COOL_DISABLED = "heat_cool_disabled"
 CONF_PRECISION = "precision"
 CONF_PID_PARAMS = "pid_params"
 CONF_PID_SAMPLE_PERIOD = "pid_sample_period"
@@ -201,6 +202,7 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_HEAT_COOL_DISABLED): vol.Coerce(bool),
         vol.Optional(CONF_HEAT_COOL_COLD_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_HEAT_COOL_HOT_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
@@ -348,6 +350,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
     target_temp = config.get(CONF_TARGET_TEMP)
+    heat_cool_disabled = config.get(CONF_HEAT_COOL_DISABLED)
     heat_cool_cold_tolerance = config.get(CONF_HEAT_COOL_COLD_TOLERANCE)
     heat_cool_hot_tolerance = config.get(CONF_HEAT_COOL_HOT_TOLERANCE)
     initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE)
@@ -389,6 +392,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 min_temp,
                 max_temp,
                 target_temp,
+                heat_cool_disabled,
                 heat_cool_cold_tolerance,
                 heat_cool_hot_tolerance,
                 initial_hvac_mode,
@@ -414,6 +418,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             min_temp,
             max_temp,
             target_temp,
+            heat_cool_disabled,
             heat_cool_cold_tolerance,
             heat_cool_hot_tolerance,
             initial_hvac_mode,
@@ -459,7 +464,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             elif controller.mode == HVAC_MODE_COOL and HVAC_MODE_COOL not in self._hvac_list:
                 self._hvac_list.append(HVAC_MODE_COOL)
 
-        if HVAC_MODE_COOL in self._hvac_list and HVAC_MODE_HEAT in self._hvac_list:
+        if (HVAC_MODE_COOL in self._hvac_list and HVAC_MODE_HEAT in self._hvac_list) and not heat_cool_disabled:
             self._hvac_list.append(HVAC_MODE_HEAT_COOL)
 
     async def async_added_to_hass(self):

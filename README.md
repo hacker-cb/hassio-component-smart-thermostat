@@ -76,6 +76,7 @@ climate:
 * `max_temp` _(Optional, default=35)_ - Set maximum set point available.
 * `away_temp` _(Optional)_ - Temperature used by the `away` mode. If this is not specified, the preset mode feature will not be available.
 * `target_temp` _(Optional)_ - Initial target temperature.
+* `heat_cool_disabled` _(Optional, default=false)_ - Disable `heat_cool` mode.
 * `heat_cool_cold_tolerance` _(Optional, default=0.3)_ - Cold tolerance for turning on heater controllers. Used only in `heat_cool` mode.
 * `heat_cool_hot_tolerance` _(Optional, default=0.3)_ - Hot tolerance for turning on cooler controllers. Used only in `heat_cool` mode.
 * `initial_hvac_mode` _(Optional)_ - Initial HVAC mode.

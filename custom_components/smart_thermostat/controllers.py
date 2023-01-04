@@ -989,14 +989,6 @@ class ClimatePidController(AbstractPidController):
         return None
 
     async def _async_turn_on(self, reason=None):
-        _LOGGER.info("%s: %s - Turning on climate %s (%s)",
-                     self._thermostat_entity_id,
-                     self.name, self._target_entity_id, reason)
-
-        await self._hass.services.async_call(CLIMATE_DOMAIN, SERVICE_TURN_ON, {
-            ATTR_ENTITY_ID: self._target_entity_id
-        }, context=self._context)
-
         _LOGGER.debug("%s: %s - Setting HVAC mode to %s", self._thermostat_entity_id, self.name, self.mode)
         data = {
             ATTR_ENTITY_ID: self._target_entity_id,

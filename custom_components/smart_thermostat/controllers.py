@@ -40,6 +40,8 @@ PWM_SWITCH_ATTR_LAST_CONTROL_STATE = "last_control_state"
 PWM_SWITCH_MIN_VALUE = 0
 PWM_SWITCH_MAX_VALUE = 100
 
+TARGET_TEMP_STEP_FALLBACK = 0.1
+
 
 def _round_step(value: float, step: float):
     return round(value / step) * step
@@ -908,7 +910,7 @@ class NumberPidController(AbstractPidController):
         state: State = self._hass.states.get(self._target_entity_id)
         if not state:
             return value
-        step = state.attributes.get(ATTR_STEP)
+        step = state.attributes.get(ATTR_STEP, TARGET_TEMP_STEP_FALLBACK)
         return _round_step(value, step)
 
     def _get_current_output(self):
@@ -979,7 +981,7 @@ class ClimatePidController(AbstractPidController):
         state: State = self._hass.states.get(self._target_entity_id)
         if not state:
             return value
-        step = state.attributes.get(ATTR_TARGET_TEMP_STEP)
+        step = state.attributes.get(ATTR_TARGET_TEMP_STEP, TARGET_TEMP_STEP_FALLBACK)
         return _round_step(value, step)
 
     def _get_current_output(self):

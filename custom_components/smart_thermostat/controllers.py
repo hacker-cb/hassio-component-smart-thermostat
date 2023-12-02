@@ -481,7 +481,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         pid_params = self._current_pid_params
 
         self._pid = PID(
-            pid_params.kp, pid_params.ki, pid_params.kp,
+            pid_params.kp, pid_params.ki, pid_params.kd,
             setpoint=target_temp,
             output_limits=output_limits,
             auto_mode=False,

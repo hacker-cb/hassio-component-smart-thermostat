@@ -8,9 +8,9 @@ from typing import Optional, final, Mapping, Any
 from simple_pid import PID
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
-from homeassistant.components.climate import HVAC_MODE_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, ATTR_HVAC_ACTION
-from homeassistant.components.climate.const import CURRENT_HVAC_IDLE, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
-    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP, CURRENT_HVAC_OFF, ATTR_TARGET_TEMP_STEP
+from homeassistant.components.climate import HVACMode, ATTR_HVAC_ACTION
+from homeassistant.components.climate.const import HVACAction, SERVICE_SET_HVAC_MODE, ATTR_HVAC_MODE, \
+    SERVICE_SET_TEMPERATURE, ATTR_MIN_TEMP, ATTR_MAX_TEMP, ATTR_TARGET_TEMP_STEP
 from homeassistant.components.input_number import ATTR_MIN, ATTR_MAX, SERVICE_SET_VALUE, ATTR_VALUE, ATTR_STEP
 from homeassistant.const import STATE_OFF
 from homeassistant.const import STATE_ON, ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF, ATTR_TEMPERATURE
@@ -94,7 +94,7 @@ class AbstractController(abc.ABC):
         self._keep_alive = keep_alive
         self.__running = False
         self._hass: Optional[HomeAssistant] = None
-        if mode not in [HVAC_MODE_COOL, HVAC_MODE_HEAT]:
+        if mode not in [HVACMode.COOL, HVACMode.HEAT]:
             raise ValueError(f"Unsupported mode: '{mode}'")
 
     def set_thermostat(self, thermostat: Thermostat):
@@ -294,7 +294,7 @@ class SwitchController(AbstractController):
             if self._is_on():
                 current_state = STATE_ON
             else:
-                current_state = HVAC_MODE_OFF
+                current_state = HVACMode.OFF
             try:
                 long_enough = condition.state(
                     self._hass,
@@ -311,7 +311,7 @@ class SwitchController(AbstractController):
         too_cold = cur_temp <= target_temp - self._cold_tolerance
         too_hot = cur_temp >= target_temp + self._hot_tolerance
 
-        need_turn_on = (too_hot and self._mode == HVAC_MODE_COOL) or (too_cold and self._mode == HVAC_MODE_HEAT)
+        need_turn_on = (too_hot and self._mode == HVACMode.COOL) or (too_cold and self._mode == HVACMode.HEAT)
 
         _LOGGER.debug(f"%s: %s - too_hot: %s, too_cold: %s, need_turn_on: %s, is on: %s, cur: %s, target: %s (%s)",
                       self._thermostat_entity_id, self.name,
@@ -429,7 +429,7 @@ class AbstractPidController(AbstractController, abc.ABC):
         if not pid_params:
             raise ValueError(f"PID params can't be None ({reason})")
 
-        if self._mode == HVAC_MODE_COOL:
+        if self._mode == HVACMode.COOL:
             pid_params.invert()
             _LOGGER.info("%s: %s - Cooler mode. Inverting all PID params: %s (%s)",
                          self._thermostat_entity_id,
@@ -969,7 +969,7 @@ class ClimatePidController(AbstractPidController):
         if not state:
             return False
         hvac_action = state.attributes.get(ATTR_HVAC_ACTION)
-        return hvac_action not in (CURRENT_HVAC_IDLE, CURRENT_HVAC_OFF)
+        return hvac_action not in (HVACAction.IDLE, HVACAction.OFF)
 
     def _is_on(self):
         state: State = self._hass.states.get(self._target_entity_id)

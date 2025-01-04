@@ -14,17 +14,11 @@ from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE,
-    CURRENT_HVAC_COOL,
-    CURRENT_HVAC_HEAT,
-    CURRENT_HVAC_IDLE,
-    HVAC_MODE_COOL,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_HEAT_COOL,
-    HVAC_MODE_OFF,
+    HVACAction,
+    HVACMode,
     PRESET_AWAY,
     PRESET_NONE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE
+    ClimateEntityFeature,
 )
 from homeassistant.components.input_boolean import DOMAIN as INPUT_BOOLEAN_DOMAIN
 from homeassistant.components.input_number import DOMAIN as INPUT_NUMBER_DOMAIN
@@ -52,8 +46,10 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.restore_state import RestoreEntity
 from . import DOMAIN, PLATFORMS
-from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, ClimatePidController, REASON_THERMOSTAT_FIRST_RUN, \
-    REASON_THERMOSTAT_HVAC_MODE_CHANGED, REASON_THERMOSTAT_TARGET_TEMP_CHANGED, REASON_THERMOSTAT_SENSOR_CHANGED, REASON_CONTROL_ENTITY_CHANGED, \
+from .controllers import SwitchController, Thermostat, AbstractController, PidParams, NumberPidController, \
+    ClimatePidController, REASON_THERMOSTAT_FIRST_RUN, \
+    REASON_THERMOSTAT_HVAC_MODE_CHANGED, REASON_THERMOSTAT_TARGET_TEMP_CHANGED, REASON_THERMOSTAT_SENSOR_CHANGED, \
+    REASON_CONTROL_ENTITY_CHANGED, \
     PwmSwitchPidController
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,9 +86,8 @@ CONF_PID_SWITCH_ENTITY_ID = "switch_entity_id"
 CONF_PID_SWITCH_INVERTED = "switch_inverted"
 CONF_PWM_SWITCH_PERIOD = "pwm_period"
 
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
+SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 SUPPORTED_TARGET_DOMAINS = [SWITCH_DOMAIN, INPUT_BOOLEAN_DOMAIN, NUMBER_DOMAIN, INPUT_NUMBER_DOMAIN, CLIMATE_DOMAIN]
-
 
 #
 ATTR_LAST_ASYNC_CONTROL_HVAC_MODE = "async_control_hvac_mode"
@@ -206,7 +201,7 @@ DATA_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_HEAT_COOL_COLD_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_HEAT_COOL_HOT_TOLERANCE, default=DEFAULT_HEAT_COOL_TOLERANCE): cv.positive_float,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]
         ),
         vol.Optional(CONF_PRECISION): vol.In(
             [PRECISION_TENTHS, PRECISION_HALVES, PRECISION_WHOLE]
@@ -367,7 +362,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if cooler_config:
         controllers += _create_controllers(
             'cooler',
-            HVAC_MODE_COOL,
+            HVACMode.COOL,
             cooler_config,
             heat_cool_cold_tolerance,
             heat_cool_hot_tolerance
@@ -376,7 +371,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if heater_config:
         controllers += _create_controllers(
             'heater',
-            HVAC_MODE_HEAT,
+            HVACMode.HEAT,
             heater_config,
             heat_cool_cold_tolerance,
             heat_cool_hot_tolerance
@@ -435,7 +430,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._last_async_control_hvac_mode = None
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
-        self._hvac_list = [HVAC_MODE_OFF]
+        self._hvac_list = [HVACMode.OFF]
         self._cur_temp = None
         self._temp_lock = asyncio.Lock()
         self._min_temp = min_temp
@@ -447,11 +442,11 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         self._unit = unit
         self._unique_id = unique_id
         self._support_flags = SUPPORT_FLAGS
-        self._hvac_action = CURRENT_HVAC_IDLE
+        self._hvac_action = HVACAction.IDLE
         self._sensor_stale_duration = sensor_stale_duration
         self._remove_stale_tracking = None
         if away_temp:
-            self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
+            self._support_flags = SUPPORT_FLAGS | ClimateEntityFeature.PRESET_MODE
             self._attr_preset_modes = [PRESET_NONE, PRESET_AWAY]
         else:
             self._attr_preset_modes = [PRESET_NONE]
@@ -459,13 +454,13 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         for controller in self._controllers:
             controller.set_thermostat(self)
-            if controller.mode == HVAC_MODE_HEAT and HVAC_MODE_HEAT not in self._hvac_list:
-                self._hvac_list.append(HVAC_MODE_HEAT)
-            elif controller.mode == HVAC_MODE_COOL and HVAC_MODE_COOL not in self._hvac_list:
-                self._hvac_list.append(HVAC_MODE_COOL)
+            if controller.mode == HVACMode.HEAT and HVACMode.HEAT not in self._hvac_list:
+                self._hvac_list.append(HVACMode.HEAT)
+            elif controller.mode == HVACMode.COOL and HVACMode.COOL not in self._hvac_list:
+                self._hvac_list.append(HVACMode.COOL)
 
-        if (HVAC_MODE_COOL in self._hvac_list and HVAC_MODE_HEAT in self._hvac_list) and not heat_cool_disabled:
-            self._hvac_list.append(HVAC_MODE_HEAT_COOL)
+        if (HVACMode.COOL in self._hvac_list and HVACMode.HEAT in self._hvac_list) and not heat_cool_disabled:
+            self._hvac_list.append(HVACMode.HEAT_COOL)
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""
@@ -481,7 +476,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         old_state = await self.async_get_last_state()
 
         for controller in self._controllers:
-            attrs = old_state.attributes.get(controller.get_unique_id(), {}) if old_state else  {}
+            attrs = old_state.attributes.get(controller.get_unique_id(), {}) if old_state else {}
 
             await controller.async_added_to_hass(self.hass, attrs)
 
@@ -547,7 +542,7 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
 
         # Set default state to off
         if not self._hvac_mode:
-            self._hvac_mode = HVAC_MODE_OFF
+            self._hvac_mode = HVACMode.OFF
 
     def get_hass(self) -> HomeAssistant:
         return self.hass
@@ -618,20 +613,20 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
         Need to be one of CURRENT_HVAC_*.
         """
 
-        action = CURRENT_HVAC_IDLE
+        action = HVACAction.IDLE
 
-        if self._hvac_action == CURRENT_HVAC_IDLE:
+        if self._hvac_action == HVACAction.IDLE:
             pass
 
-        elif self._hvac_action == CURRENT_HVAC_COOL:
+        elif self._hvac_action == HVACAction.COOLING:
             for controller in self._controllers:
-                if controller.mode == HVAC_MODE_COOL and controller.working:
-                    action = CURRENT_HVAC_COOL
+                if controller.mode == HVACMode.COOL and controller.working:
+                    action = HVACAction.COOLING
 
-        elif self._hvac_action == CURRENT_HVAC_HEAT:
+        elif self._hvac_action == HVACAction.HEATING:
             for controller in self._controllers:
-                if controller.mode == HVAC_MODE_HEAT and controller.working:
-                    action = CURRENT_HVAC_HEAT
+                if controller.mode == HVACMode.HEAT and controller.working:
+                    action = HVACAction.HEATING
 
         return action
 
@@ -762,26 +757,27 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
             new_hvac_action = self._hvac_action
 
             if self._last_async_control_hvac_mode != self._hvac_mode:
-                _LOGGER.info("%s: mode changed: %s -> %s", self.entity_id, self._last_async_control_hvac_mode, self._hvac_mode)
-            elif self._hvac_mode == HVAC_MODE_OFF:
+                _LOGGER.info("%s: mode changed: %s -> %s", self.entity_id, self._last_async_control_hvac_mode,
+                             self._hvac_mode)
+            elif self._hvac_mode == HVACMode.OFF:
                 # Skip control, last `OFF` was already processed
                 return
 
-            if self._hvac_mode == HVAC_MODE_OFF:
-                new_hvac_action = CURRENT_HVAC_IDLE
+            if self._hvac_mode == HVACMode.OFF:
+                new_hvac_action = HVACAction.IDLE
 
             if None not in (cur_temp, target_temp):
 
                 too_cold = cur_temp <= target_temp - self._heat_cool_cold_tolerance
                 too_hot = cur_temp >= target_temp + self._heat_cool_hot_tolerance
 
-                if self._hvac_mode == HVAC_MODE_COOL or (self._hvac_mode == HVAC_MODE_HEAT_COOL and too_hot):
-                    new_hvac_action = CURRENT_HVAC_COOL
-                elif self._hvac_mode == HVAC_MODE_HEAT or (self._hvac_mode == HVAC_MODE_HEAT_COOL and too_cold):
-                    new_hvac_action = CURRENT_HVAC_HEAT
+                if self._hvac_mode == HVACMode.COOL or (self._hvac_mode == HVACMode.HEAT_COOL and too_hot):
+                    new_hvac_action = HVACAction.COOLING
+                elif self._hvac_mode == HVACMode.HEAT or (self._hvac_mode == HVACMode.HEAT_COOL and too_cold):
+                    new_hvac_action = HVACAction.HEATING
                 debug_info = f"hvac_action: {new_hvac_action}, (cur: {cur_temp}, target: {target_temp})"
             else:
-                new_hvac_action = CURRENT_HVAC_IDLE
+                new_hvac_action = HVACAction.IDLE
                 debug_info = f"current/target not available (cur: {cur_temp}, target: {target_temp})"
 
             # _LOGGER.debug("%s: HVAC old: %s, new: %s (%s): %s", self.entity_id, self._hvac_action, new_hvac_action, reason, debug_info)
@@ -798,16 +794,16 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 # _LOGGER.debug("%s: Check for stop %s, %s", self.entity_id, controller.name, controller_debug_info)
 
                 if (
-                        self._hvac_action != CURRENT_HVAC_COOL and
-                        controller.mode == HVAC_MODE_COOL and
-                        (controller.running or (controller.working and self._hvac_mode != HVAC_MODE_OFF))
+                        self._hvac_action != HVACAction.COOLING and
+                        controller.mode == HVACMode.COOL and
+                        (controller.running or (controller.working and self._hvac_mode != HVACMode.OFF))
                 ):
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, controller_debug_info)
                     await controller.async_stop()
                 if (
-                        self._hvac_action != CURRENT_HVAC_HEAT and
-                        controller.mode == HVAC_MODE_HEAT and
-                        (controller.running or (controller.working and self._hvac_mode != HVAC_MODE_OFF))
+                        self._hvac_action != HVACAction.HEATING and
+                        controller.mode == HVACMode.HEAT and
+                        (controller.running or (controller.working and self._hvac_mode != HVACMode.OFF))
                 ):
                     _LOGGER.debug("%s: Stopping %s, %s", self.entity_id, controller.name, controller_debug_info)
                     await controller.async_stop()
@@ -819,15 +815,15 @@ class SmartThermostat(ClimateEntity, RestoreEntity, Thermostat):
                 # _LOGGER.debug("%s: Check for start %s, %s", self.entity_id, controller.name, controller_debug_info)
 
                 if (
-                        self._hvac_action == CURRENT_HVAC_COOL and
-                        controller.mode == HVAC_MODE_COOL and
+                        self._hvac_action == HVACAction.COOLING and
+                        controller.mode == HVACMode.COOL and
                         not controller.running
                 ):
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, controller_debug_info)
                     await controller.async_start()
                 if (
-                        self._hvac_action == CURRENT_HVAC_HEAT and
-                        controller.mode == HVAC_MODE_HEAT and
+                        self._hvac_action == HVACAction.HEATING and
+                        controller.mode == HVACMode.HEAT and
                         not controller.running
                 ):
                     _LOGGER.debug("%s: Starting %s, %s", self.entity_id, controller.name, controller_debug_info)

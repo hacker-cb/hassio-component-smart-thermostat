@@ -666,7 +666,9 @@ class PwmSwitchPidController(AbstractPidController):
 
         last_control_time = attrs.get(PWM_SWITCH_ATTR_LAST_CONTROL_TIME, None)
         if last_control_time is not None:
-            self._last_control_time = dt_util.parse_datetime(last_control_time)
+            parsed = dt_util.parse_datetime(last_control_time)
+            # Normalise to UTC so restored local-time values compare correctly
+            self._last_control_time = dt_util.as_utc(parsed) if parsed is not None else None
 
         self._last_control_state = attrs.get(PWM_SWITCH_ATTR_LAST_CONTROL_STATE, None)
 
@@ -799,7 +801,7 @@ class PwmSwitchPidController(AbstractPidController):
             # Start with ON state
             new_state = STATE_ON
         else:
-            now = dt_util.now().replace(microsecond=0)
+            now = dt_util.utcnow().replace(microsecond=0)
 
             if self._last_control_state == STATE_ON and pwm_off_duration.total_seconds() > 0:
                 if now >= (self._last_control_time + pwm_on_duration):
@@ -828,7 +830,7 @@ class PwmSwitchPidController(AbstractPidController):
 
         # Save last control params
         if new_state:
-            self._last_control_time = dt_util.now().replace(microsecond=0)
+            self._last_control_time = dt_util.utcnow().replace(microsecond=0)
             self._last_control_state = new_state
             self._thermostat.async_write_ha_state()
 
